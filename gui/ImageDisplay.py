@@ -11,8 +11,12 @@ import scipy.interpolate
 from sklearn.linear_model.tests import test_least_angle
 import math
 import random
+from vasc_seg.ScanLines import ScanLines
+import scipy.io as sio
+
 
 class ChannelViewer(Queue.Queue):
+
     def __init__(self,name):
         Queue.Queue.__init__(self,2)
         self.imv = pg.ImageView(None,name)
@@ -28,10 +32,21 @@ class ChannelViewer(Queue.Queue):
         x2=x1+math.cos(angleLine)*length;
         y2=y1+math.sin(angleLine)*length;
         
+        
+        #x1=0
+        #y1=0
+        #x2=200;
+        #y2=100;
+        
         self.region = pg.LineROI([x1, y1], [x2, y2], width=1, pen=(1,9))
+        self.imv.addItem(self.region)
         
         self.linescan_not_displayed=1
         self.imv.show()
+        
+        #self.setTestImage()
+        #self.generateAutoLines()
+        #self.displayLines()
         
     def showWindow(self):
         self.imv.show()
@@ -65,6 +80,48 @@ class ChannelViewer(Queue.Queue):
         else:
             print('not enough lines to delete')
 
+    def generateAutoLines(self, 
+                          scales=1, 
+                          diam=10.0, 
+                          length=25.0, 
+                          tolerance=0.1):
+        
+        sl=ScanLines(self.getCurrentImage())
+        print('image shape: '+str(np.shape(self.getCurrentImage())))
+        #binary map
+        sl.CalcBinaryMap(scales=scales)
+        binmap=sl.GetOutputBinaryMap()
+
+        #graphed skeleton
+        sl.CalcGraphFromSeg()
+        graph=sl.GetOutputGraph()
+        
+        #potential linescans
+        sl.CalcLines(diam=diam, length=length, tolerance=tolerance)
+        lines=sl.GetOutputLines()
+        
+        self.resetLines()
+        
+        for i in lines:
+            
+            x1=i[0,0]
+            y1=i[0,1]
+            
+            x2=i[1,0]
+            y2=i[1,1]
+
+            self.lines.append(pg.LineROI([x1, x2], [y1, y2], width=1, pen=(1,9)))
+ 
+    def getCurrentImage(self):
+        return np.array(self.imv.image).astype('float')
+        
+    def setTestImage(self, path='C:/git-projects/twophoton/vasc_seg/data/im1.mat'):
+        
+        raw=sio.loadmat(path)['im']   
+        s=250
+        raw=raw[s,:,:]
+        self.imv.setImage(-raw)
+    
     def update(self):
         try:
             data = self.get(False)
