@@ -1,0 +1,50 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Aug 31 12:15:12 2015
+
+@author: flesage
+
+    Main application for OCT imaging, this uses various components that can be reused
+    but here we specify the hardware.
+"""
+
+import sys
+import numpy as np
+from PyQt4 import QtGui
+import config_oct
+from base.Galvos import Galvos
+from base.Galvos import Converter
+from base.liomnimaq import NiIMAQCamera
+from gui.OCTGalvosController import OCTGalvosController
+
+
+if __name__ == '__main__':
+
+    app = QtGui.QApplication(sys.argv)
+
+    # Define where the galvos take their signal from and route sample clock
+    # for camera triggering
+    galvos=Galvos(config_oct.galvos_device,config_oct.galvos_aox,config_oct.galvos_aoy)
+    galvos.setExternalClock(True,config_oct.camera_clock,config_oct.camera_clock_pfi)
+    # Define scale of system (according to telescope and objective)
+    # Thorlabs galvo mirrors provide 0.8 V per degree
+    radians_per_volt = 2*np.pi/(360*0.8)
+    f1=75
+    f2=150
+    fobj=18
+    scale_um_per_volt=(2*fobj*f1/f2*radians_per_volt)*1000
+    unit_converter = Converter()
+    unit_converter.setScale(scale_um_per_volt,scale_um_per_volt)
+    galvos.setUnitConverter(unit_converter)
+
+    # Camera interface for OCT Acquisitions
+    cam = NiIMAQCamera()
+
+    # Start the gui controlling the galvos
+    galvos_controller = OCTGalvosController()
+    galvos_controller.setGalvos(galvos)
+    galvos_controller.setCamera(cam)
+    galvos_controller.show()
+
+    # Start the gui controlling the acquisition (save, views, etc.)
+    app.exec_()

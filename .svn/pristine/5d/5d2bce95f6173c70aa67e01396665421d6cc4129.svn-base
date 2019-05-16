@@ -1,0 +1,16 @@
+<RCC>
+    <qresource prefix="/icons/img" >
+        <file>save_icon.png</file>
+        <file>settings_icon.png</file>
+        <file>Shutter_icon.png</file>
+        <file>snapshot_icon.png</file>
+        <file>start_icon.png</file>
+        <file>stop_icon.png</file>
+        <file>stop_save_icon.png</file>
+        <file>arrow_down.png</file>
+        <file>arrow_left.png</file>
+        <file>arrow_right.png</file>
+        <file>arrow_up.png</file>
+        <file>home_icon.png</file>
+    </qresource>
+</RCC>

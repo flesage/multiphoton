@@ -1,0 +1,184 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Aug 31 10:48:31 2015
+
+@author: flesage
+"""
+import os
+from PyQt4 import QtGui
+from PyQt4 import QtCore
+from PyQt4.QtGui import QWidget
+from ui_oct_galvos_form import Ui_OCTGalvosForm
+from gui.ImageDisplay import ChannelViewer
+from gui.ImageDisplay import OCTViewer
+import pyqtgraph as pg
+from base.liomio import DataSaver
+from os.path import expanduser
+
+class OCTGalvosController(QWidget, Ui_OCTGalvosForm):
+    def __init__(self):
+        QWidget.__init__(self)
+
+        # Set up the user interface from Designer.
+        self.setupUi(self)
+
+        # Change in any data
+        validator=QtGui.QIntValidator(1,3000,self)
+        self.lineEdit_nx.setValidator(validator)
+        self.lineEdit_ny.setValidator(validator)
+        self.lineEdit_width.setValidator(validator)
+        self.lineEdit_height.setValidator(validator)
+        validator2=QtGui.QIntValidator(1,200,self)
+        self.lineEdit_extrapoints.setValidator(validator2)
+        validator3=QtGui.QIntValidator(1,32,self)
+        self.lineEdit_fastaxisrepeat.setValidator(validator3)
+        self.lineEdit_linerate.setValidator(validator)
+
+        self.comboBox_scantype.activated.connect(self.scantype_chosen)
+
+        # Start and stop scans
+        self.pushButton_start.clicked.connect(self.startscan)
+        self.pushButton_stop.clicked.connect(self.stopscan)
+
+        self.pushButton_center.clicked.connect(self.move_center)
+        self.pushButton_down.clicked.connect(self.move_down)
+        self.pushButton_right.clicked.connect(self.move_right)
+        self.pushButton_up.clicked.connect(self.move_up)
+        self.pushButton_left.clicked.connect(self.move_left)
+        self.pushButton_savedir.clicked.connect(self.setSaveDir)
+        self.galvos=None
+        self.center_x=0.0
+        self.center_y=0.0
+        # Need to build default behavior
+        home = expanduser("~")
+        self.save_dir=home
+        self.label_directory.setText(self.save_dir)
+        self.saver = None
+
+    def setSaveDir(self):
+        self.save_dir = str(QtGui.QFileDialog.getExistingDirectory(self, "Select Save Directory"))
+        self.label_directory.setText(self.save_dir)
+
+    def setGalvos(self,galvos):
+        self.galvos=galvos
+
+    def setCamera(self,camera):
+        self.camera=camera
+
+
+
+    def startscan(self):
+
+        # Read values
+        nx=int(self.lineEdit_nx.text())
+        ny=int(self.lineEdit_ny.text())
+        width=float(self.lineEdit_width.text())
+        height=float(self.lineEdit_height.text())
+        n_extra=float(self.lineEdit_extrapoints.text())
+        n_repeat=int(self.lineEdit_fastaxisrepeat.text())
+        line_rate=float(self.lineEdit_linerate.text())
+        exposure = float(self.lineEdit_exposure.text())
+        # Set camera
+        self.camera.open_camera('img0',n_repeat*(nx+n_extra),exposure)
+        self.camera.configure_for_single_grab()
+        self.timer = pg.QtCore.QTimer()
+        self.save_vol_timer = pg.QtCore.QTimer()
+        if self.checkBox_fringe.isChecked():
+            channel0=ChannelViewer('Fringe')
+            self.camera.setDataConsumer(channel0,False)
+            self.timer.timeout.connect(channel0.update)
+
+        if self.checkBox_view_image.isChecked():
+            channel1=OCTViewer('Image')
+            self.camera.setDataConsumer(channel1,False)
+            self.timer.timeout.connect(channel1.update)
+
+        if self.checkBox_save.isChecked():
+            self.saver=DataSaver(os.path.join(self.save_dir,str(self.lineEdit_hdf5name.text())))
+            self.saver.setBlockSize(ny*n_repeat)
+            self.saver.setDatasetName(str(self.lineEdit_datasetname.text()))
+
+            # This set of attributes will be added to the dataset
+            self.saver.addAttribute('nx',nx)
+            self.saver.addAttribute('ny',ny)
+            self.saver.addAttribute('n_repeat',n_repeat)
+            self.saver.addAttribute('width',width)
+            self.saver.addAttribute('height',height)
+            self.saver.addAttribute('n_extra',n_extra)
+            self.saver.addAttribute('line_rate',line_rate)
+            self.saver.addAttribute('exposure',exposure)
+
+            self.camera.setDataConsumer(self.saver,True)
+            self.saver_pipe_conn = self.saver.startSaving()
+            self.save_vol_timer.timeout.connect(self.updateSaveLabel)
+            self.save_vol_timer.start(1000)
+
+        self.timer.start(100)
+
+        # We can start camera, it is triggered to galvos
+        self.camera.start()
+
+        # Set ramp
+        if self.comboBox_scantype.currentText() == 'SawTooth':
+            self.galvos.setSawToothRamp(self.center_x-width/2,self.center_y-height/2,self.center_x+width/2,self.center_y+height/2,nx,ny,n_extra,n_repeat,line_rate)
+        elif self.comboBox_scantype.currentText() == 'Triangular':
+            self.galvos.setTriangularRamp(self.center_x-width/2,self.center_y-height/2,self.center_x+width/2,self.center_y+height/2,nx,ny,n_extra,n_repeat,line_rate)
+        elif self.comboBox_scantype.currentText() == 'Line':
+            self.galvos.setLineRamp(self.center_x-width/2,self.center_y-height/2,self.center_x+width/2,self.center_y+height/2,nx,ny,n_extra,line_rate)
+        # Start generating
+        self.galvos.startTask()
+
+    def updateSaveLabel(self):
+        if self.saver_pipe_conn.poll():
+            value = self.saver_pipe_conn.recv()
+            self.lcdNumber_acquisition.display(value[0])
+            self.lcdNumber_saveqsize.display(value[1])
+
+    def stopscan(self):
+        # stop in inverse order of start
+        self.galvos.stopTask()
+        self.camera.stop()
+        self.camera.close_camera()
+        self.timer.stop()
+        if self.saver is not None:
+            self.saver.stopSaving()
+            self.save_vol_timer.stop()
+            self.saver = None
+
+    def scantype_chosen(self,text):
+        self.galvos.stopTask()
+        if text=='Sawtooth':
+            self.label_nx.setText('Nx')
+            self.label_ny.setText('Ny')
+        elif text=='Triangular':
+            self.label_nx.setText('Nx')
+            self.label_ny.setText('Ny')
+        elif text=='Line':
+            self.label_nx.setText('N points')
+            self.label_ny.setText('N repeat')
+
+    def move_up(self):
+        height=float(self.lineEdit_height.text())
+        self.center_y=self.center_y-25
+        self.galvos.move(self.center_x,self.center_y)
+
+    def move_down(self):
+        height=float(self.lineEdit_height.text())
+        self.center_y=self.center_y+25
+        self.galvos.move(self.center_x,self.center_y)
+
+    def move_right(self):
+        width=float(self.lineEdit_width.text())
+        self.center_x=self.center_x-25
+        self.galvos.move(self.center_x,self.center_y)
+
+    def move_left(self):
+        width=float(self.lineEdit_width.text())
+        self.center_x=self.center_x+25
+        self.galvos.move(self.center_x,self.center_y)
+
+    def move_center(self):
+        self.center_x=0.0
+        self.center_y=0.0
+        self.galvos.move(self.center_x,self.center_y)
+

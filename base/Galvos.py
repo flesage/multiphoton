@@ -84,8 +84,21 @@ class Galvos():
         self.center_x = 0.0
         self.center_y = 0.0
         self.shift_display = 0
-        self.finite = False        
+        self.finite = False      
+    
+    def configOnDemand(self):  
+        self.ao_task = VoltageOutTask()
+        self.ao_task.CreateAOVoltageChan(posixpath.join(self.device,self.ao_x)+','+posixpath.join(self.device,self.ao_y),"Galvos",-10.0,10.0,DAQmx_Val_Volts,None)
 
+    def moveOnDemand(self,x,y):
+        print('xy: '+str(x)+';'+str(y))
+        data=np.zeros((2,1))
+        data[0]=self.converter.voltX(x)
+        data[1]=self.converter.voltY(y)
+        print(data)
+        self.ao_task.WriteAnalogF64(1,True,-1,DAQmx_Val_GroupByChannel,
+                                            data,byref(self.read),None)
+        
     def config(self):
         # First create both channels
         self.ao_task = VoltageOutTask()

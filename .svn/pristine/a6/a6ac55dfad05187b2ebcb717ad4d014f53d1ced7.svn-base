@@ -1,0 +1,338 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Aug 06 14:15:18 2015
+
+@author: Xavier Ducharme Rivard
+
+This class serves as a GUI for the control of the piezoelectric's frequency and
+amplitude signal. It uses the PiezoTask.py class to set up the tasks'
+parameters.
+"""
+
+# -*- coding: utf-8 -*-
+
+import sys
+import subprocess
+
+from PyQt4 import QtGui, QtCore
+from PyQt4.QtCore import pyqtSlot
+from PyQt4.QtGui import *
+
+from base.liomacq import PiezoTask
+from base import Motors
+import base.TCPCommClient as comm
+
+class MainGui(QtGui.QMainWindow):
+
+    def __init__(self):
+        super(MainGui, self).__init__()
+        self.taskStarted = False
+        self.fileNameOK = False
+        self.fileName = "DefaultFile"
+
+        self.initUI()
+
+    def closeEvent(self, evnt):
+        print('Clearing serial ports...')
+#        zaberMotors.ser.close()
+#        zMotor.motor.cleanUpAPT()
+        self.close()
+
+    def initUI(self):
+
+        self._want_to_close = False
+
+        # Buttons
+        self.startBtn = QtGui.QPushButton("Start Task", self)
+        self.startBtn.setMinimumHeight(40)
+        self.stopBtn = QtGui.QPushButton("Stop task", self)
+        self.stopBtn.setMinimumHeight(40)
+
+        self.acqStartBtn = QtGui.QPushButton('Start image acquisition', self)
+        self.acqStartBtn.setMinimumWidth(200)
+        self.acqStartBtn.setMinimumHeight(40)
+
+        self.acqStopBtn = QtGui.QPushButton('Stop image acquisition', self)
+        self.acqStopBtn.setMinimumWidth(200)
+        self.acqStopBtn.setMinimumHeight(40)
+
+        self.xUpBtn = QtGui.QPushButton(self)
+        self.xUpBtn.setMinimumWidth(40)
+        self.xUpBtn.setMinimumHeight(40)
+        self.xUpBtn.setIcon(QtGui.QIcon('arrow-alt-right.png'))
+
+        self.xDownBtn = QtGui.QPushButton(self)
+        self.xDownBtn.setMinimumWidth(40)
+        self.xDownBtn.setMinimumHeight(40)
+        self.xDownBtn.setIcon(QtGui.QIcon('arrow-alt-left.png'))
+
+        self.yUpBtn = QtGui.QPushButton(self)
+        self.yUpBtn.setMinimumWidth(40)
+        self.yUpBtn.setMinimumHeight(40)
+        self.yUpBtn.setIcon(QtGui.QIcon('arrow-alt-right.png'))
+
+        self.yDownBtn = QtGui.QPushButton(self)
+        self.yDownBtn.setMinimumWidth(40)
+        self.yDownBtn.setMinimumHeight(40)
+        self.yDownBtn.setIcon(QtGui.QIcon('arrow-alt-left.png'))
+
+        self.zUpBtn = QtGui.QPushButton(self)
+        self.zUpBtn.setMinimumWidth(40)
+        self.zUpBtn.setMinimumHeight(40)
+        self.zUpBtn.setIcon(QtGui.QIcon('arrow-alt-up.png'))
+
+        self.zDownBtn = QtGui.QPushButton(self)
+        self.zDownBtn.setMinimumWidth(40)
+        self.zDownBtn.setMinimumHeight(40)
+        self.zDownBtn.setIcon(QtGui.QIcon('arrow-alt-down.png'))
+
+        # Editable text boxes
+        self.freqLineEdit = QLineEdit('30',self)
+        self.ampLineEdit = QLineEdit('0.952',self)
+        self.filenameEdit = QLineEdit('Enter the name of the output image files', self)
+
+        self.XLineEdit = QLineEdit('0', self)
+        self.XLineEdit.setMinimumWidth(30)
+        self.YLineEdit = QLineEdit('0', self)
+        self.YLineEdit.setMinimumWidth(30)
+        self.ZLineEdit = QLineEdit('0', self)
+        self.ZLineEdit.setMinimumWidth(7)
+
+        # Display boxes
+        self.freqDisplay = QtGui.QLabel("Set frequency (Hz)", self)
+        self.freqDisplay.setMinimumWidth(200)
+
+        self.ampDisplay = QtGui.QLabel("Set amplitude (V)", self)
+        self.ampDisplay.setMinimumWidth(200)
+
+        self.XDisplay = QtGui.QLabel('_X ', self)
+        self.XDisplay.setMinimumWidth(20)
+        self.YDisplay = QtGui.QLabel('_Y ', self)
+        self.YDisplay.setMinimumWidth(20)
+        self.ZDisplay = QtGui.QLabel('_Z ', self)
+        self.ZDisplay.setMinimumWidth(20)
+
+        self.motorDisplay = QtGui.QLabel('Motors control')
+        self.xMotorDisplay = QtGui.QLabel('X :', self)
+        self.yMotorDisplay = QtGui.QLabel('Y :', self)
+        self.zMotorDisplay = QtGui.QLabel('Z :', self)
+
+
+        # Small grid for motor coordinates
+#        widget2 = QWidget();
+        self.smallGrid = QtGui.QGridLayout();
+        self.smallGrid.addWidget(self.XDisplay, 0, 0)
+        self.smallGrid.addWidget(self.XLineEdit, 0, 1)
+        self.smallGrid.addWidget(self.YDisplay, 0, 2)
+        self.smallGrid.addWidget(self.YLineEdit, 0, 3)
+        self.smallGrid.addWidget(self.ZDisplay, 0, 4)
+        self.smallGrid.addWidget(self.ZLineEdit, 0, 5)
+
+        # Small grid for motor buttons
+#        self.smallGridBtns = QtGui.QGridLayout();
+#        self.smallGridBtns.addWidget(self.xDownBtn, 0, 0)
+#        self.smallGridBtns.addWidget(self.xUpBtn, 0, 1)
+#        self.smallGridBtns.addWidget(self.yDownBtn, 0, 2)
+#        self.smallGridBtns.addWidget(self.xUpBtn, 0, 3)
+#        self.smallGridBtns.addWidget(self.zDownBtn, 0, 4)
+#        self.smallGridBtns.addWidget(self.zUpBtn, 0, 5)
+
+        # Validator
+        # Makes sure the input is a double value for the frequecy and amplitude
+        self.validator = QDoubleValidator()
+        self.freqLineEdit.setValidator(self.validator)
+        self.ampLineEdit.setValidator(self.validator)
+
+        # Callback function connections
+        self.startBtn.clicked.connect(self.startTask)
+        self.stopBtn.clicked.connect(self.stopTask)
+        self.xUpBtn.clicked.connect(self.moveUp)
+        self.xDownBtn.clicked.connect(self.moveDown)
+        self.yUpBtn.clicked.connect(self.moveUp)
+        self.yDownBtn.clicked.connect(self.moveDown)
+        self.zUpBtn.clicked.connect(self.moveUp)
+        self.zDownBtn.clicked.connect(self.moveDown)
+        self.acqStartBtn.clicked.connect(self.startAcq)
+
+        self.freqLineEdit.textChanged[str].connect(self.setFrequency)
+        self.ampLineEdit.textChanged[str].connect(self.setAmplitude)
+        self.freqLineEdit.textChanged.connect(self.check_state)
+        self.freqLineEdit.textChanged.emit(self.freqLineEdit.text())
+        self.ampLineEdit.textChanged.connect(self.check_state)
+        self.ampLineEdit.textChanged.emit(self.ampLineEdit.text())
+        self.filenameEdit.textChanged[str].connect(self.setFileName)
+        self.filenameEdit.textChanged.emit(self.filenameEdit.text())
+
+        # Vertical line
+        self.vertLine = QFrame()
+        self.vertLine.setFrameStyle(QFrame.VLine)
+        self.vertLine.setSizePolicy(QSizePolicy.Minimum,QSizePolicy.Expanding)
+
+        # Create the grid layout
+        widget = QWidget()
+        widget.grid = QtGui.QGridLayout()
+        widget.grid.addWidget(self.freqDisplay, 0, 0)
+        widget.grid.addWidget(self.ampDisplay, 0, 1)
+        widget.grid.addWidget(self.freqLineEdit, 1, 0)
+        widget.grid.addWidget(self.ampLineEdit, 1, 1)
+        widget.grid.addWidget(self.startBtn, 2, 0)
+        widget.grid.addWidget(self.stopBtn, 2, 1)
+        widget.grid.addWidget(self.acqStartBtn, 3, 0)
+        widget.grid.addWidget(self.acqStopBtn, 3, 1)
+        widget.grid.addWidget(self.filenameEdit, 4, 0)
+        widget.grid.addWidget(self.xMotorDisplay, 1, 3)
+        widget.grid.addWidget(self.xUpBtn, 1, 5)
+        widget.grid.addWidget(self.xDownBtn, 1, 4)
+        widget.grid.addWidget(self.yMotorDisplay, 2, 3)
+        widget.grid.addWidget(self.yUpBtn, 2, 5)
+        widget.grid.addWidget(self.yDownBtn, 2, 4)
+        widget.grid.addWidget(self.zMotorDisplay, 3, 3)
+        widget.grid.addWidget(self.zUpBtn, 3, 5)
+        widget.grid.addWidget(self.zDownBtn, 3, 4)
+        widget.grid.addWidget(self.vertLine, 0, 2, 5, 1)
+        widget.grid.addLayout(self.smallGrid, 4, 1)
+
+
+        widget.setLayout(widget.grid)
+        self.setCentralWidget(widget)
+        self.statusBar()
+        self.setGeometry(100, 100, 350, 120)
+        self.setWindowTitle('Piezoelectric control')
+        self.show()
+
+    # Checks the state of the validator to set the color to green if input is OK
+    def check_state(self, *args, **kwargs):
+        sender = self.sender()
+        validator = sender.validator()
+        state = validator.validate(sender.text(), 0)[0]
+        if state == QtGui.QValidator.Acceptable:
+            color = '#c4df9b' # green
+            self.statusBar().showMessage('')
+        elif state == QtGui.QValidator.Intermediate:
+            color = '#fff79a' # yellow
+        else:
+            color = '#f6989d' # red
+        if sender.text() == '0':
+            color = '#f6989d' # red
+            self.statusBar().showMessage('Please enter a value higher than 0')
+        sender.setStyleSheet('QLineEdit { background-color: %s }' % color)
+
+    def moveDown(self, direction):
+        if self.sender() == self.zDownBtn:
+            dist = 0.0009989993023987
+            if zMotor.getPos() < dist:
+                return
+            zMotor.moveRel(-dist)
+        elif self.sender() == self.xDownBtn:
+            zaberMotors.motorx.move_rel(-5000)
+        elif self.sender() == self.yDownBtn:
+            zaberMotors.motory.move_rel(-5000)
+        self.setMotorPos()
+
+    def moveUp(self, direction):
+        if self.sender() == self.zUpBtn:
+            dist = 0.0009989993023987
+            zMotor.moveRel(dist)
+        elif self.sender() == self.xUpBtn:
+            zaberMotors.motorx.move_rel(2.015748031)
+        elif self.sender() == self.yUpBtn:
+            zaberMotors.motory.move_rel(5000)
+        self.setMotorPos()
+
+    # Callback function of the file name LineEdit
+    def setFileName(self, text):
+        if len(text) > 20:
+            color = '#f6989d' # red
+            self.statusBar().showMessage('File name is too long')
+        elif text == "":
+            color = '#fff79a' # yellow
+            self.statusBar().showMessage('Please enter a file name')
+        else:
+            color = '#c4df9b' # green
+            self.fileName = text + '_X' + self.XLineEdit.text() \
+                                 + '_Y' + self.YLineEdit.text() \
+                                 + '_Z' + self.ZLineEdit.text() + '.bin'
+            self.fileNameOK = True;
+            self.statusBar().showMessage('')
+        self.sender().setStyleSheet('QLineEdit { background-color: %s }' % color)
+
+    # Sets the amplitude of the output waveform
+    def setAmplitude(self, amp):
+        if amp != u'':
+            if float(amp) > 5.0:
+                self.statusBar().showMessage('Maximum voltage is 10')
+            else:
+                self.piezo.setAmplitude(float(amp))
+
+    # Sets the frequency of the output waveform
+    def setFrequency(self, freq):
+        if freq != u'':
+            self.piezo.setFrequency(float(freq))
+
+    # Sets the motor positions on the line edits
+    def setMotorPos(self):
+        self.XLineEdit.setText(str(zaberMotors.motorx.get_pos()))
+        self.YLineEdit.setText(str(zaberMotors.motory.get_pos()))
+        self.ZLineEdit.setText(str(zMotor.getPos()))
+
+    # Start image acquisitionh
+    def startAcq(self):
+
+        global piezo
+        if self.taskStarted == True:
+            piezo = PiezoTask()
+            piezo.setFrequency(float(self.freqLineEdit.text()))
+            piezo.setAmplitude(float(self.ampLineEdit.text()))
+
+        piezo.config()
+        piezo.startTask()
+        self.taskStarted = True;
+        self.statusBar().showMessage("Your task has started")
+
+        self.pAcq = subprocess.Popen('C:\Users\OCT\SaveImages.exe' + ' ' + 'ImagesOCT.bin', shell = False)
+
+    #k Callback function of the Start Task Button
+    def startTask(self):
+        if self.ampLineEdit.text()== "" or self.freqLineEdit.text() == ""\
+        or self.freqLineEdit.text() == '0':
+            self.statusBar().showMessage("Please enter valid parameters")
+            return
+
+#        tcp.sendMessage(self.fileName) # Send filename to 2nd computer
+        if self.taskStarted == True:
+            self.piezo = PiezoTask()
+            self.piezo.setFrequency(float(self.freqLineEdit.text()))
+            self.piezo.setAmplitude(float(self.ampLineEdit.text()))
+
+        self.piezo.config()
+        self.piezo.startTask()
+        self.taskStarted = True;
+        self.statusBar().showMessage("Your task has started")
+
+
+        self.pTask = subprocess.Popen('C:\Users\OCT\RealTimeDisplay.exe')
+
+    # Callback functions of the Stop Task Button
+    def stopTask(self):
+        self.taskStarted = False
+        self.piezo.stopTask()
+        self.piezo.clearTask()
+        self.statusBar().showMessage("Your task has ended")
+        self.pTask.terminate()
+
+def main():
+#    global tcp
+#    tcp = comm.TCPCommClient()
+    global zMotor, zaberMotors
+    piezo = PiezoTask()
+#    zaberMotors = Motors.ZaberMotor()
+#    zMotor = Motors.ThorLabMotor()
+    app = QtGui.QApplication(sys.argv)
+    app.setApplicationName("Piezoelectric control")
+    ex = MainGui()
+
+    app.exec_()
+
+
+if __name__ == '__main__':
+    main()

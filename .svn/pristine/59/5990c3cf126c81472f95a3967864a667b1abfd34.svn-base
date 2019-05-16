@@ -1,0 +1,53 @@
+'''
+Created on Mar 8, 2016
+
+@author: flesage
+'''
+from PyQt4 import QtGui
+from PyQt4.QtGui import QWidget
+import pyqtgraph as pg
+from ui_speckle_form import Ui_SpeckleForm
+from gui.ImageDisplay import ChannelViewer
+from gui.ImageDisplay import SpeckleViewer
+
+class SpeckleController(QWidget, Ui_SpeckleForm):
+    '''
+    classdocs
+    '''
+
+
+    def __init__(self):
+
+        QWidget.__init__(self)
+
+        # Set up the user interface from Designer.
+        self.setupUi(self)
+        validator=QtGui.QIntValidator(2,20,self)
+        self.navg_lineEdit.setValidator(validator)
+
+        self.start_pushButton.clicked.connect(self.startscan)
+        self.stop_pushButton.clicked.connect(self.stopscan)
+
+    def setCamera(self,camera):
+        self.camera=camera
+
+    def startscan(self):
+        
+        navg=int(self.navg_lineEdit.text())
+        
+        self.timer = pg.QtCore.QTimer()
+        channel0=ChannelViewer('Raw Image')
+        self.camera.setDataConsumer(channel0,False)
+        self.timer.timeout.connect(channel0.update)
+
+        channel1=SpeckleViewer('Speckle',navg)
+        self.camera.setDataConsumer(channel1,False)
+        self.timer.timeout.connect(channel1.update)
+        
+        self.timer.start(100)
+
+        self.camera.start()
+
+    def stopscan(self):
+        self.camera.stop()
+        self.timer.stop()

@@ -1,0 +1,25 @@
+#-------------------------------------------------
+#
+# Project created by QtCreator 2015-08-31T09:22:01
+#
+#-------------------------------------------------
+
+QT       += core gui
+
+greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
+
+TARGET = liomacq_gui
+TEMPLATE = app
+
+
+SOURCES += main.cpp\
+        mainwindow.cpp
+
+HEADERS  += mainwindow.h
+
+FORMS    += mainwindow.ui \
+    galvos_form.ui \
+    oct_galvos_form.ui
+
+RESOURCES += \
+    icons.qrc

@@ -1,0 +1,87 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sat Sep 12 12:09:59 2015
+
+@author: flesage
+"""
+
+"""
+Created on Sat Sep 12 07:58:44 2015
+
+@author: flesage
+"""
+
+import Queue
+import posixpath
+import numpy as np
+import h5py
+from PyQt4 import QtCore
+
+class DataSaver(QtCore.QThread):
+    def __init__(self,filename):
+        QtCore.QThread.__init__(self)
+
+        self.queue = Queue.Queue(256)
+        self.filename=filename
+        self.f = h5py.File(filename, 'a')
+        self.datasetname = 'dummy'
+        self.block_size = 512
+
+    def setBlockSize(self,block_size):
+
+        self.block_size = block_size
+
+    def setDatasetName(self,dataset_name):
+
+        self.datasetname = dataset_name
+        self.f.create_group(posixpath.join('/scans',self.datasetname))
+
+    def addAttribute(self,attribute,value):
+        self.f[posixpath.join('/scans',self.datasetname)].attrs[attribute]=value
+
+    def startSaving(self):
+
+        # Thread to display so that the puts in queue are very fast
+        self.start()
+        self.started = True
+        self.stopAsked = False
+
+    def stopSaving(self):
+        # Stop saving, join save thread and clear data in queue to prepare
+        # for next round
+        self.stopAsked = True
+        self.wait()
+        self.queue = Queue.Queue(256)
+        self.f.close()
+        self.stopAsked = False
+
+    def put(self,value,flag):
+        self.queue.put(value,flag)
+
+    def run(self):
+        save_index = 0
+        index = 0
+        while self.started:
+            try:
+                # We block for 2 seconds on no data to optimize CPU and avoid
+                # running this while loop for no reason
+                data = self.queue.get(True,2)
+                # Create data buffer
+                if index == 0:
+                    buf=np.zeros((data.shape[0],data.shape[1],self.block_size))
+                buf[:,:,index]=data
+                index = (index + 1) % self.block_size
+                if index == 0:
+                    self.f[posixpath.join('/scans',self.datasetname,'scan'+u'%05d' % save_index)]=buf
+                    save_index = save_index + 1
+                    print 'Saved volume: '+ str(save_index)
+                    self.emit( QtCore.SIGNAL('Scan'), save_index )
+                    self.emit( QtCore.SIGNAL('QueueSize'), self.queue.qsize() )
+            except Queue.Empty:
+                if self.stopAsked:
+                    self.started = False
+                # Reloop
+                pass
+        # Save last acquisition if incomplete (duplicate if exactly complete?)
+        self.f[posixpath.join('/scans',self.datasetname,'scan'+u'%05d' % save_index)]=buf
+

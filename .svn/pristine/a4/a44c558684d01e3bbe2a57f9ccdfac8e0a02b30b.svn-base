@@ -1,0 +1,48 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Sep  1 09:56:49 2015
+
+@author: flesage
+
+Used to configure a spectific application with more generic helper functions
+for the different hardware parts of a system
+"""
+
+filelocation= 'C:\\Users\\LiomW17\\Desktop\\data\\filelocation'
+
+shutter_device = '/Dev3'
+shutter_line = 'port0/line0'
+
+laser_intensity_device = 'COM10'
+
+galvos_device = '/Dev3'
+galvos_aox = 'ao0'
+galvos_aoy = 'ao1'
+
+pmt_device = '/Dev3'
+pmt = 'ai0:1'
+
+motorscomport='COM4'
+motorsbaud=19200
+motorsdeviceName='deviceName'
+motorslineID='lineID'
+
+zabercomport='COM9'
+
+vibratome='COM12'
+
+zabconfig=True
+maxzaberx=177282
+maxzabery=141099.0
+maxzaberxpipe=120943.0
+minzaberypipe=60469.0
+
+SNlabjack=49853845
+defnumber=43
+
+maxthorlabsmotor=36.0
+
+#position de la coupe en mm
+posxcoupeinit=37.95
+posxcoupefin=87.95
+posycoupe= 30

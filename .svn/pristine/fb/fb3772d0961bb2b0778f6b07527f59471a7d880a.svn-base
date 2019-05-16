@@ -1,0 +1,26 @@
+'''
+Created on Mar 8, 2016
+
+@author: flesage
+'''
+import sys
+from PyQt4 import QtGui
+from base.liomnimaq import NiIMAQCamera
+from gui import SpeckleController
+from base import imgenerator
+
+
+if __name__ == '__main__':
+    app = QtGui.QApplication(sys.argv)
+    # Camera interface for OCT Acquisitions
+    camera = NiIMAQCamera()
+    camera.open_2d_camera('img0',10)
+    camera.configure_for_single_grab()
+    
+
+    # Start the gui controlling the galvos
+    controller = SpeckleController.SpeckleController()
+    controller.setCamera(camera)
+    controller.show()
+    # Start the gui controlling the acquisition (save, views, etc.)
+    app.exec_()

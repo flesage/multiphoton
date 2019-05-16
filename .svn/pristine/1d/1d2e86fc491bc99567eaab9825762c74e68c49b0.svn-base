@@ -1,0 +1,80 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Sep  1 09:56:49 2015
+
+@author: flesage
+
+Used to configure a spectific application with more generic helper functions
+for the different hardware parts of a system
+"""
+
+filelocation= 'C:\\Users\\LiomW17\\Desktop\\data\\filelocation'
+
+shutter_device = '/Dev3'
+shutter_line = 'port0/line0'
+
+laser_intensity_device = 'COM10'
+
+galvos_device = '/Dev3'
+galvos_aox = 'ao0'
+galvos_aoy = 'ao1'
+
+pmt_device = '/Dev3'
+pmt = 'ai0:1'
+
+motorscomport='COM4'
+motorsbaud=19200
+motorsdeviceName='deviceName'
+motorslineID='lineID'
+
+zabercomport='COM9'
+
+vibratome='COM12'
+
+slicethickness=0.12 #in mm
+
+zabconfig=True
+maxzaberx=177282
+maxzabery=141099.0
+maxzaberxpipe=120943.0
+minzaberypipe=60469.0
+
+SNlabjack=49853845
+defnumber=43
+
+maxthorlabsmotor=35.0 # 8.0 test chambre et port echantillon, sinon 30.0 avec bassin
+
+#slicing position for zabers in mm
+posxcoupeinit=40.95
+posxcoupefin=87.95
+posycoupe= 35.0
+
+speedmotorxy=2500.0 # speed of zaber motors
+
+
+###########A intégrer dans le Gui##################
+
+numberofslicedesired = 100 # nombre de tranches voulues au total
+
+numberofsameprecheck = 3 # nombre de slices utilisant le meme plan modulé
+
+powerprecheck = 30.0 # en pourcent
+
+#powerimagetaking = 40.0 - pour echantillon
+
+nstepprecheck = 7 # nombre d'images prisent par volume pour le precheck
+
+tresholdtriggerimage = 31500 # 31500 cerveau , 34000 ovaires
+
+tresholdtriggersurface = 40 #20 pour tranche ovaire, 40 pour cerveau
+
+
+
+
+
+
+
+
+
+
+

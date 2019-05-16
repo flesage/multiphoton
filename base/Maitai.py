@@ -37,6 +37,7 @@ class Maitai():
         while (response[0:-3]!='850'):
             command= 'WAV?\r'
             response = self.write_command(command,10)
+            print response
         print 'wavelength set!'
         command = '*STB?\r'
         response = self.write_command(command,10)

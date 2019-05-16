@@ -1,0 +1,25 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sat Sep 12 14:46:40 2015
+
+@author: flesage
+"""
+
+import os
+import sys
+import platform
+
+if platform.system() == 'Darwin':
+    anaconda_path = '/Users/flesage/anaconda/bin'
+else:
+    anaconda_path = anaconda_path = 'C:\Anaconda\Lib\site-packages\PyQt4'
+
+base_dir=os.path.dirname(os.path.dirname(sys.argv[0]))
+
+# Generate uic/rc elements and move to gui folder
+#os.system(os.path.join(anaconda_path,'pyuic4 ')+os.path.join(base_dir,'liomacq_gui','galvos_form.ui')+' -o '+ os.path.join(base_dir,'gui','ui_galvos_form.py'))
+
+os.system('C:\Anaconda\python.exe ' + os.path.join(anaconda_path,'uic','pyuic.py') + ' -x ' + os.path.join(base_dir,'liomacq_gui','galvos_form.ui')+' -o '+ os.path.join(base_dir,'gui','ui_galvos_form.py'))
+
+
+os.system(os.path.join(anaconda_path,'pyrcc4 ')+os.path.join(base_dir,'liomacq_gui','icons.qrc')+' -o '+os.path.join(base_dir,'gui','icons_rc.py'))

@@ -64,9 +64,9 @@ if __name__ == '__main__':
     print('...done!')
 
 #   power_motor = RotationMotor(config.laser_intensity_device)
-    laser = Maitai(config.comPortLaser)    
-    replaser = laser.ReadStatus();
-    print 'status laser:' + replaser
+    #laser = Maitai(config.comPortLaser)    
+    #replaser = laser.ReadStatus();
+    #print 'status laser:' + replaser
     # Define scale of system (according to telescope and objective)
     # Thorlabs galvo mirrors provide 0.8 V per degree but this has to be calibrated on target
     radians_per_volt = 2*np.pi/(360.0)#1.06 corrected for small, 0.5 is for big
@@ -104,7 +104,7 @@ if __name__ == '__main__':
     galvos_controller.setShutter3Ph(shutter3ph)
     galvos_controller.setAoEOM(power2ph)
     galvos_controller.setMotors(motors)
-    galvos_controller.setMaitai(laser)
+    #galvos_controller.setMaitai(laser)
     galvos_controller.setThorlabs(rotmotor3P)
     galvos_controller.setAiTask(ai_meas)
     galvos_controller.set_brain_pos_reset()
@@ -126,7 +126,6 @@ if __name__ == '__main__':
     #timer3.stop()
     
     timer.stop()
-    timer2.stop()
-    rotmotor3P.clean_up_APT()
-    
+    timer2.stop()    
+    galvos_controller.turnOffWheel3P()
     print 'killing GUI'

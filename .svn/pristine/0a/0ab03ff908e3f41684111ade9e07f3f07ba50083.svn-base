@@ -1,0 +1,22 @@
+
+
+
+import numpy as np
+
+class classtest():
+    def __init__(self):
+        print 'initie'
+        
+
+    def test(self):
+        self.c=np.zeros((5,5))
+        self.D = np.memmap('C:\\Users\\LiomW17\\Desktop\\test\\testvalidateimage.dat',dtype='uint16',mode='w+',shape=(5,5))
+        self.D[:,:]=self.c
+    
+    def destructeurtest(self):
+        print self.c
+        del self.c
+        del self.D
+    
+    def takememmap(self):
+        self.c = np.memmap('C:\\Users\\LiomW17\\Desktop\\test\\testvalidateimage.dat',dtype='uint16',mode='w+',shape=(5,5))

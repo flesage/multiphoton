@@ -1,0 +1,242 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sat Sep 12 12:09:59 2015
+
+@author: flesage
+"""
+
+"""
+Created on Sat Sep 12 07:58:44 2015
+
+@author: flesage
+"""
+import os
+import posixpath
+import numpy as np
+import h5py
+import nibabel as nb
+from Queue import Empty
+from multiprocessing import Process, Queue, Pipe
+import math
+import time
+from main import config
+
+class DataSaver():
+    def __init__(self,filename):
+
+        self.filename=filename
+        self.f = h5py.File(filename, 'a')
+        self.datasetname = 'dummy'
+        self.block_size = 512
+
+    def setBlockSize(self,block_size):
+
+        self.block_size = block_size
+        if block_size < 512:
+            block_size = 512
+        self.queue = Queue(2*block_size)
+
+    def setDatasetName(self,dataset_name):
+
+        self.datasetname = dataset_name
+        self.f.create_group(posixpath.join('/scans',self.datasetname))
+
+    def addAttribute(self,attribute,value):
+        self.f[posixpath.join('/scans',self.datasetname)].attrs[attribute]=value
+
+    def startSaving(self):
+
+        # Thread to display so that the puts in queue are very fast
+        self.f.close()
+        self.parent_conn, child_conn = Pipe()
+        self.p = Process(target=save_process,args=(self.queue,self.block_size,self.datasetname,child_conn,self.filename))
+        self.p.start()
+        return self.parent_conn
+
+    def stopSaving(self):
+        # Stop saving, join save thread and clear data in queue to prepare
+        # for next round
+        self.parent_conn.send([False])
+        self.p.join()
+        self.queue = Queue(2*self.block_size)
+
+    def put(self,value,flag):
+        self.queue.put(value,flag)
+
+def save_process(queue,block_size,datasetname,conn,filename):
+
+    f = h5py.File(filename, 'a')
+    save_index = 0
+    index = 0
+    started = True
+
+    while started:
+        try:
+            # We block for 2 seconds on no data to optimize CPU and avoid
+            # running this while loop for no reason
+            data = queue.get(True,1)
+            # Create data buffer
+            if index == 0:
+                buf=np.zeros((data.shape[0],data.shape[1],block_size),dtype='int16')
+            buf[:,:,index]=data
+            index = (index + 1) % block_size
+            if index == 0:
+                f[posixpath.join('/scans',datasetname,'scan'+u'%05d' % save_index)]=buf
+                save_index = save_index + 1
+                conn.send([save_index,queue.qsize()])
+        except Empty:
+            if conn.poll():
+                started = conn.recv()[0]
+            # Reloop
+            pass
+    # Save last acquisition if incomplete (duplicate if exactly complete?)
+    f[posixpath.join('/scans',datasetname,'scan'+u'%05d' % save_index)]=buf
+    f.close()
+
+
+class NiiStackSaver():
+    def __init__(self,pathname,nx,ny,nz,n_extra,stepmaxinx,stepmaxiny,nvolperslice, Motorcontrol,zmotorcontrol,topposition,zstep,saving,imageprecheck,current_slice,i,j,positiondepartrotation,channel):
+        self.channel = channel
+        self.z_index = 0
+        self.nx = nx
+        self.ny = ny
+        self.i = i
+        self.j = j
+        self.saving = saving
+        self.n_extra = n_extra
+        self.power_motor = Motorcontrol
+        self.motors = zmotorcontrol # for laser power
+        self.top = topposition
+        self.zstep = zstep
+        self.nz = nz
+        self.current_slice=current_slice
+        self.pathname=pathname
+        self.image = np.memmap('C:\\Users\\LiomW17\\Desktop\\test\\test' + str(self.channel)+ '.dat',dtype='uint16',mode='r+',shape=(ny,nx+n_extra,nz))
+        self.nvolperslice = nvolperslice
+        self.stepinx = 0
+        self.stepiny = 0
+        self.stepmaxinx=stepmaxinx
+        self.stepmaxiny=stepmaxiny
+        self.affine = np.eye(4)
+        self.Precheck = False
+        self.contrasteimage = 0
+        self.imageprecheck = imageprecheck
+        self.positiondepartrotation= positiondepartrotation
+        self.percentdepart= (math.sin(((self.positiondepartrotation/(45./math.pi))-(math.pi/2.+23.*math.pi/45.))) +1.)*100./2.
+        time.sleep(0.2)
+        time.sleep(0.2)
+        self.pourcentmax = 99
+        self.exception = False
+
+
+        
+    def put(self,data,flag):
+        
+        #print str(self) + ' z index: ' + str(self.z_index) + ' mean data: ' + str(np.mean(np.ravel(data)))
+        
+        self.image[:,:,self.z_index] = data + 32768
+        
+        self.z_index = self.z_index+1
+        
+        
+        
+        
+        
+        #Détection d'organe, faire une matrice et considérer les images intéressantes
+        
+        if self.z_index == self.nz and self.saving == False:
+        
+            
+            self.imageminz = np.amin(self.image[:,:,:], axis = 2) # min en z
+          
+            self.std = np.std(self.imageminz)
+            
+            #self.P = np.ravel(self.imagemeanz)
+            
+            
+            
+            #self.contrasteimage = 0
+            
+            #for data in self.P :
+                #if data < config.tresholdtriggerimage :#31500 pour cerveau
+                    #self.contrasteimage = self.contrasteimage +1
+                    #print self.contrasteimage
+            
+            #print self.contrasteimage,'/',len(self.P),'=', 100.0*float(self.contrasteimage)/float(len(self.P)), '%'
+            print 'Std = ', self.std, ', threshold = ', config.tresholdtriggerimage
+            
+            #if self.contrasteimage > 0.001*float(len(self.P))  : #0.1%
+             
+            if self.std > config.tresholdtriggerimage:
+                self.imageprecheck[self.j,self.i,0]= 1.
+                print('organe détecté')
+                #print self.imageprecheck
+            else:
+                self.imageprecheck[self.j,self.i,0]= 2.
+                
+                print ('organe pas détecté')
+                
+        
+                #Détection de surface_ utilisation du gradient
+                
+      
+            if self.imageprecheck[self.j,self.i,0] == 1:
+        
+        
+                self.imgmeanxy = np.mean(self.image[:,:,:], axis = (0, 1)) # mean en x et y
+            
+                #print self.imgmeanxy
+                self.imggradxy = -np.gradient(self.imgmeanxy)
+                #print self.imggradxy , 'self.imggradxy'
+                self.surfacevalue = None
+                
+                for i in range(len(self.imgmeanxy)):
+                        
+                    if  self.imggradxy[i] > config.tresholdtriggersurface:
+                        self.surfacevalue = i
+                        break
+                    if self.surfacevalue is None and i == len(self.imgmeanxy) - 1:
+                        self.surfacevalue = float(np.argmax(self.imggradxy))
+
+                #print self.surfacevalue , 'self.surfacevalue'
+                self.imageprecheck[self.j,self.i,1]= self.top - (self.surfacevalue * self.zstep/1000.0) # a cause de stack_thread_precheck dans GalvosController
+                #print self.imageprecheck
+
+
+        if self.z_index == self.nz:
+            self.z_index = 0
+            #self.power_motor.goTo_abs(1, self.positiondepartrotation)
+            #time.sleep(1)
+
+    def save(self,i,j,current_slice,channel):
+        
+        self.i = i
+        self.j = j
+        self.current_slice = current_slice
+        self.channel = channel
+        
+        print 'CH :'+ str(self.channel)+ ' data:' +str(np.mean(np.ravel(self.image)))
+  
+        self.img = nb.Nifti1Image(self.image[:,:,:],self.affine)
+        self.filocation= os.path.join(self.pathname, 'channel_'+str(self.channel)+'_nx_'+ str(self.j) + '_ny_'+ str(self.i) + '_slice_'+ str(self.current_slice) + '.nii.gz')
+        nb.save(self.img, self.filocation)
+
+    
+          
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            

@@ -1,0 +1,240 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sat Sep 12 12:09:59 2015
+
+@author: flesage
+"""
+
+"""
+Created on Sat Sep 12 07:58:44 2015
+
+@author: flesage
+"""
+import os
+import posixpath
+import numpy as np
+import h5py
+import nibabel as nb
+from Queue import Empty
+from multiprocessing import Process, Queue, Pipe
+import math
+
+
+class DataSaver():
+    def __init__(self,filename):
+
+        self.filename=filename
+        self.f = h5py.File(filename, 'a')
+        self.datasetname = 'dummy'
+        self.block_size = 512
+
+    def setBlockSize(self,block_size):
+
+        self.block_size = block_size
+        if block_size < 512:
+            block_size = 512
+        self.queue = Queue(2*block_size)
+
+    def setDatasetName(self,dataset_name):
+
+        self.datasetname = dataset_name
+        self.f.create_group(posixpath.join('/scans',self.datasetname))
+
+    def addAttribute(self,attribute,value):
+        self.f[posixpath.join('/scans',self.datasetname)].attrs[attribute]=value
+
+    def startSaving(self):
+
+        # Thread to display so that the puts in queue are very fast
+        self.f.close()
+        self.parent_conn, child_conn = Pipe()
+        self.p = Process(target=save_process,args=(self.queue,self.block_size,self.datasetname,child_conn,self.filename))
+        self.p.start()
+        return self.parent_conn
+
+    def stopSaving(self):
+        # Stop saving, join save thread and clear data in queue to prepare
+        # for next round
+        self.parent_conn.send([False])
+        self.p.join()
+        self.queue = Queue(2*self.block_size)
+
+    def put(self,value,flag):
+        self.queue.put(value,flag)
+
+def save_process(queue,block_size,datasetname,conn,filename):
+
+    f = h5py.File(filename, 'a')
+    save_index = 0
+    index = 0
+    started = True
+
+    while started:
+        try:
+            # We block for 2 seconds on no data to optimize CPU and avoid
+            # running this while loop for no reason
+            data = queue.get(True,1)
+            # Create data buffer
+            if index == 0:
+                buf=np.zeros((data.shape[0],data.shape[1],block_size),dtype='int16')
+            buf[:,:,index]=data
+            index = (index + 1) % block_size
+            if index == 0:
+                f[posixpath.join('/scans',datasetname,'scan'+u'%05d' % save_index)]=buf
+                save_index = save_index + 1
+                conn.send([save_index,queue.qsize()])
+        except Empty:
+            if conn.poll():
+                started = conn.recv()[0]
+            # Reloop
+            pass
+    # Save last acquisition if incomplete (duplicate if exactly complete?)
+    f[posixpath.join('/scans',datasetname,'scan'+u'%05d' % save_index)]=buf
+    f.close()
+
+
+class NiiStackSaver():
+    def __init__(self,pathname,nx,ny,nz,n_extra,stepmaxinx,stepmaxiny,nvolperslice, Motorcontrol,zmotorcontrol,topposition,zstep,saving):
+        self.z_index = 0
+        self.nx=nx
+        self.ny = ny
+        self.saving = saving
+        self.n_extra = n_extra
+        self.power_motor = Motorcontrol
+        self.motors = zmotorcontrol
+        self.top = topposition
+        self.zstep = zstep
+        self.nz = nz
+        self.pathname=pathname
+        self.image = np.memmap('C:\\Users\\LiomW17\\Desktop\\test\\test.dat',dtype='uint16',mode='w+',shape=(ny,nx+n_extra,nz))
+        self.nvolperslice = nvolperslice
+        self.current_slice = 0
+        self.current_vol_in_slice = 0
+        self.stepinx = 0
+        self.stepiny = 0
+        self.stepmaxinx=stepmaxinx
+        self.stepmaxiny=stepmaxiny
+        self.affine = np.eye(4)
+        self.Precheck = False
+        self.contrasteimage = 0
+        self.imageprecheck = np.memmap('C:\\Users\\LiomW17\\Desktop\\test\\testprecheck.dat',dtype='uint16',mode='w+',shape=(self.stepmaxinx,self.stepmaxiny,2))
+        self.matricedimagesvalides=np.zeros((self.stepmaxinx,self.stepmaxiny))
+        self.imageprecheck= self.matricedimagesvalides
+        self.positiondepartrotation= self.power_motor.getPos(1)
+        
+        
+    def put(self,data,flag):
+        
+        self.image[:,:,self.z_index] = data + 32768
+        
+        self.z_index = self.z_index+1
+        
+        
+        '''
+        #ajustement du laser no matter if saving or not
+        self.posrotationary= self.power_motor.getPos(1)
+        self.power_motor.goTo_abs(1,self.posrotationary+1.0)
+        
+        if self.posrotationary+1.0 >= float((45/math.pi)*(math.asin(2*90/100-1)+math.pi/2+23*math.pi/45)) :#secure maximum
+            deg=float((45/math.pi)*(math.asin(2*90/100-1)+math.pi/2+23*math.pi/45))
+            self.power_motor.goTo_abs(1, deg)
+            print 'laser maxed out at 90'
+        
+        if self.z_index == self.nz :
+            self.power_motor.goTo_abs(1, self.positiondepartrotation)
+           
+        '''
+        
+        
+        #Détection d'organe, faire une matrice et considérer les images intéressantes
+        
+        if self.z_index == self.nz and self.saving == False:
+        
+            
+            self.contrasteimage = 0
+            
+            self.imgmeanz = np.mean(self.image[:,:,:], axis = 2) # mean en z
+            
+            
+            
+            self.P = np.ravel(self.imagemeanz)
+            
+            for data in self.P :
+                if data < 31000 :
+                    self.contrasteimage = self.contrasteimage +1
+            
+            
+            
+            if self.contrasteimage > (0.1*len(self.P))  : #10% de l'image...
+                    
+                self.matricedimagesvalides[self.stepinx,self.stepiny,0]= 1
+                
+                
+        
+        '''
+        #Détection de surface
+                
+      
+        if self.matricedimagesvalides[self.stepinx,self.stepiny,0] == 1:
+        
+        
+            self.imgmeanxy = np.mean(self.image[:,:,:], axis = (0, 1)) # mean en x et y
+            
+            ##self.imagemeanxygrad = np.gradient(self.imagemeanz)
+                
+            self.minvalue = np.argmin(self.imgmeanxy)
+                
+            
+            #self.top = self.top -(self.minvalue*self.zstep) # a verifier... sur une colonne complete
+                
+        '''       
+        if self.saving == False:
+        #intern clock for low resolution check
+            self.stepinx= self.stepinx +1
+            if self.stepinx == self.stepmaxinx:
+                self.stepinx = 0
+                self.stepiny = self.stepiny + 1
+                if self.stepiny == self.stepmaxiny:
+                    self.stepiny = 0    
+       
+        
+        if self.z_index == self.nz and self.saving == True:   
+              
+            self.img = nb.Nifti1Image(self.image[:,:,:],self.affine)
+            self.filocation= os.path.join(self.pathname, 'image_nx_'+ str(self.stepinx) + '_ny_'+ str(self.stepiny) + '_slice_'+ str(self.current_slice) + '.nii.gz')
+            nb.save(self.img, self.filocation)
+            self.z_index = 0
+            self.current_vol_in_slice = self.current_vol_in_slice + 1
+            
+            self.stepinx= self.stepinx +1
+            if self.stepinx == self.stepmaxinx:
+                self.stepinx = 0
+                self.stepiny = self.stepiny + 1
+                if self.stepiny == self.stepmaxiny:
+                    self.stepiny = 0
+                    
+        if self.current_vol_in_slice == self.nvolperslice:
+            self.current_slice = self.current_slice +1 
+            self.current_vol_in_slice = 0
+            
+            
+    
+        
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            

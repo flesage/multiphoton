@@ -1,0 +1,21 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sat Nov 07 15:06:40 2015
+
+@author: LiomW17
+"""
+
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Sep  1 09:56:49 2015
+
+@author: flesage
+
+Used to configure a spectific application with more generic helper functions
+for the different hardware parts of a system
+"""
+piezo_device = '/Dev1'
+piezo_ao = 'ao1'
+
+camera_clock='ctr0'
+interference_image_clock='ctr1'

@@ -1,0 +1,17 @@
+eclipse.preferences.version=1
+encoding//base/APTMotor.py=utf-8
+encoding//base/Galvos.py=utf-8
+encoding//base/imgenerator.py=utf-8
+encoding//base/liomacq.py=utf-8
+encoding//base/liomio.py=utf-8
+encoding//base/liomnimaq.py=utf-8
+encoding//gui/GalvosController.py=utf-8
+encoding//gui/ImageDisplay.py=utf-8
+encoding//gui/OCTGalvosController.py=utf-8
+encoding//gui/icons_rc.py=utf-8
+encoding//gui/ui_galvos_form.py=utf-8
+encoding//main/config.py=utf-8
+encoding//main/oct.py=utf-8
+encoding//main/twophoton.py=utf-8
+encoding//project_utils/generate_2ph_gui_files.py=utf-8
+encoding//project_utils/generate_oct_gui_files.py=utf-8

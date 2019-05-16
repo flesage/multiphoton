@@ -1,0 +1,27 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Sep  1 09:56:49 2015
+
+@author: flesage
+
+Used to configure a spectific application with more generic helper functions
+for the different hardware parts of a system
+"""
+shutter_device = '/Dev3'
+shutter_line = '1'
+
+laser_intensity_device = '/Dev3'
+laser_intensity_ao = 'ao2'
+
+galvos_device = '/Dev3'
+galvos_aox = 'ao0'
+galvos_aoy = 'ao1'
+
+pmt_device = '/Dev3'
+pmt1 = 'ai0'
+pmt2 = 'ai1'
+
+motorscomport='COM6'
+motorsbaud=19200
+motorsdeviceName='deviceName'
+motorslineID='lineID'

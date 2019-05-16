@@ -1,0 +1,283 @@
+
+
+import nibabel as nib
+import numpy as np
+import scipy.linalg
+from mpl_toolkits.mplot3d import Axes3D
+import math
+import matplotlib.pyplot as plt
+import scipy.optimize
+import functools
+
+class classtest():
+    def __init__(self):
+        print 'initie'
+        
+
+    def test(self):
+        self.c=np.zeros((5,5))
+        self.D = np.memmap('C:\\Users\\LiomW17\\Desktop\\test\\testvalidateimage.dat',dtype='uint16',mode='w+',shape=(5,5))
+        self.D[:,:]=self.c
+    
+    def destructeurtest(self):
+        print self.c
+        del self.c
+        del self.D
+    
+    def takememmap(self):
+        self.c = np.memmap('C:\\Users\\LiomW17\\Desktop\\test\\testvalidateimage.dat',dtype='uint16',mode='w+',shape=(5,5))
+        
+    '''
+    ----------------------------------------------------------------------------------------------------------------------
+    '''    
+    def plane(self,x, y, params):
+        a = params[0]
+        b = params[1]
+        c = params[2]
+        z = a*x + b*y + c
+        return z
+
+    def error(self,params, points):
+        result = 0
+        for (x,y,z) in points:
+            plane_z = self.plane(x, y, params)
+            diff = abs(plane_z - z)
+            result += diff**2
+        return result
+        
+    def cross(self,a, b):
+        return [a[1]*b[2] - a[2]*b[1],
+                a[2]*b[0] - a[0]*b[2],
+                a[0]*b[1] - a[1]*b[0]]    
+        
+        
+    def planemodelling(self,datas):
+        
+        self.data = datas # datas in array
+        #print self.data
+
+        # regular grid covering the domain of the data
+        X,Y = np.meshgrid(np.arange(0.0,len(self.data[0,:,1]), 1), np.arange(0.0,len(self.data[:,0,1]) , 1))
+        #print 'X=',X
+        #print 'Y=',Y
+        XX = X.flatten()
+        YY = Y.flatten()
+        A=np.zeros((len(self.data[0,:,1])*len(self.data[:,0,1]),3))
+        
+        k=0
+        m=0
+        l=0
+        for j in range(len(self.data[0,:,1])*len(self.data[:,0,1])):
+                
+            A[j,0]=k 
+            A[j,1]=m
+            A[j,2]=1.0
+            k=k+1
+            if k==len(self.data[:,0,1]):
+                k=0
+                m=m+1   
+        print A
+        D=self.data[:,:,1].flatten()
+        print D
+            
+        for j in range(len(self.data[0,:,1])*len(self.data[:,0,1])):
+            if D[j]==0.0:
+                A=np.delete(A, (l), axis=0)
+                    
+                l=l-1
+            l=l+1    
+        E=D.tolist()
+        G=Imgtesting()
+        G.remove_values_from_list(E, 0.0)
+        D=np.asarray(E)
+        print D
+
+        order = 1    # 1: linear, 2: quadratic
+        if order == 1:
+            # best-fit linear plane
+    
+            C,_,_,_ = scipy.linalg.lstsq(A, D)    # coefficients
+    
+            # evaluate it on grid
+            Z = C[0]*X + C[1]*Y + C[2]
+            #print Z
+            
+            #print C
+            
+            
+            for i in range(len(Z[:,0])):
+                for j in range(len(Z[0,:])):
+                    Z[i,j] = round(Z[i,j],3)
+                    
+                    
+            #print Z
+            return Z
+            # or expressed using matrix/vector product
+            #Z = np.dot(np.c_[XX, YY, np.ones(XX.shape)], C).reshape(X.shape)
+
+        elif order == 2:
+            # best-fit quadratic curve
+            E = np.c_[np.ones(A.shape[0]), A[:,:2], np.prod(A[:,:2], axis=1), A[:,:2]**2]
+            C,_,_,_ = scipy.linalg.lstsq(E, D)
+    
+            # evaluate it on a grid
+            Z = np.dot(np.c_[np.ones(XX.shape), XX, YY, XX*YY, XX**2, YY**2], C).reshape(X.shape)
+
+            for i in range(len(Z[:,0])):
+                for j in range(len(Z[0,:])):
+                    Z[i,j] = round(Z[i,j],3)
+                    
+            
+            
+            
+            
+            return Z
+
+        '''#plot points and fitted surface
+        fig = plt.figure()
+        ax = fig.gca(projection='3d')
+        ax.plot_surface(X, Y, Z, rstride=1, cstride=1, alpha=0.2)
+        ax.scatter(A[:,0], A[:,1], D[:], c='r', s=50)
+        plt.xlabel('X')
+        plt.ylabel('Y')
+        ax.set_zlabel('Z')
+        ax.axis('equal')
+        ax.axis('tight')
+        plt.show()
+        '''
+    
+    
+    
+    
+    
+    
+        
+class Imgtesting():
+    def __init__(self):
+        print 'initie'
+        
+        
+    def downloadimage(self,filocation):
+        
+        self.img=nib.load(filocation)
+        self.imgdata= self.img.get_data()
+        
+        return self.imgdata
+    
+    def plotmeanxy(self,image):
+        self.image=image
+        self.Imgmeanxy=np.mean(self.image,axis=(0,1))
+        return self.Imgmeanxy
+        
+    def testingprogram(self,b,precheck):
+        
+        self.matrixofcalcul = np.array((-1,0,1))
+        m=0
+        for i in range(10):
+            for j in range(10):
+                if precheck[j,i] == 1 :
+                    mainnumber=b[j,i]
+                    print mainnumber
+                    neighbors = np.ravel(np.zeros((1,10)))
+                    for k in range(3):
+                        for l in range(3):
+                            if k!=1 or l!=1 :
+                                
+                                
+                                if j+self.matrixofcalcul[k] == -1 or i+self.matrixofcalcul[l] == -1:
+                                               
+                                    if j+self.matrixofcalcul[k] == -1 :
+                                        neighbors[m] = b[j+self.matrixofcalcul[k]+1,i+self.matrixofcalcul[l]]
+                                                    
+                                                    
+                                    if i+self.matrixofcalcul[l] == -1 :
+                                        neighbors[m] = b[j+self.matrixofcalcul[k],i+self.matrixofcalcul[l]+1]
+                                        
+                                else:
+                                    
+                                    try:
+                                        neighbors[m] = b[j+self.matrixofcalcul[k],i+self.matrixofcalcul[l]] #adresse mirroir
+                                        print 'k=', k
+                                        print 'l=', l
+                                        print 'self.matrixofcalcul[k]=', self.matrixofcalcul[k]
+                                        print 'self.matrixofcalcul[l]=', self.matrixofcalcul[l]
+                                        print 'neighbors[m]=', neighbors[m]
+                                        print 'm=',m
+                                        print ''                
+                                        
+                                    except:
+                                        neighbors[m] = 0.
+                                        
+                                m=m+1       
+                    print neighbors
+                    neighbors_list = neighbors.tolist()
+                    self.remove_values_from_list(neighbors_list, 0.)
+                    neighbors = np.asarray(neighbors_list)
+                    print neighbors
+                    m=0
+                    if len(neighbors)<=6 and len(neighbors)>=2:
+                        meanneighbors=np.mean(neighbors, axis=0)
+                        print meanneighbors
+                        if meanneighbors!=mainnumber:
+                            m = int(meanneighbors / (0.04))
+                            m = float(m*((0.04)))
+                            b[j,i] = m
+                            print b[j,i]
+                m=0    
+        
+    def remove_values_from_list(self,the_list, val):
+        while val in the_list:
+            the_list.remove(val)   
+            
+            
+            
+    '''     
+import numpy as np
+from base import testeur
+
+    
+ndimage.morphology.binary_fill_holes(input)    
+      
+b=np.array([[0.,0.,0.,0.,0.,0.,0.,0.,0.,0.],[0.,0.,0.,0.,0.,0.,0.,0.,0.,0.],[0.,0.,0.,-12.16,-12.08,0.,0.,0.,0.,0.],[0.,-12.12,-12.12,-12.12,-12.08,-12.04,-12.08,0.,0.,0.],[0.,-12.12,-12.12,-12.08,-12.04,-12.04,-12.04,0.,0.,0.],[0.,-12.08,-12.04,-12.04,-12.04,-12.04,-12.04,-12.08,0.,0.],[0.,0.,-12.,-12.,-12.04,-12.,-12.04,-12.04,0.,0.],[0.,0.,-12.,-12.,-12.,-12.,-12.,0.,0.,0.],[0.,0.,0.,-12.16, -12.,-12.,0.,0.,0.,0.],[0.,0.,0.,0.,0.,0.,0.,0.,0.,0.]])
+precheck = np.zeros((10,10))
+for i in range(10):
+    for j in range(10):
+        precheck[j,i]=int(b[j,i]/-12)
+
+G=testeur.Imgtesting()
+F=testeur.classtest()
+
+k=0
+m=0
+l=0
+A=np.zeros((100,3))
+for j in range(100):
+    A[j,0]=k
+    A[j,1]=m
+    A[j,2]=1.0
+    k=k+1
+    if k==10:
+        m=m+1
+        k=0
+
+
+datas = np.zeros((10,10,2))
+datas[:,:,0]=precheck
+datas[:,:,1]=b
+ 
+from base import planemodeling
+H = planemodeling.planefitting()
+H.planemodelling(datas)
+
+I = G.testingprogram(b,precheck)
+datas[:,:,1]=b
+
+H.planemodelling(datas)
+
+    '''
+    
+    
+    
+    
+    
+    

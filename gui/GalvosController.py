@@ -4,6 +4,7 @@ Created on Mon Aug 31 10:48:31 2015
 
 @author: flesage
 """
+import pyqtgraph as pg
 
 from datetime import date
 import time
@@ -15,9 +16,11 @@ from PyQt5 import uic
 from PyQt5.QtWidgets import QWidget, QFileDialog
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QVBoxLayout, QSizePolicy, QMessageBox, QPushButton
 from PyQt5.QtGui import QIcon
-
+from scipy import signal
 
 from base import liomio
+from base.liomacq import OnDemandVoltageOutTask
+from base.po2Acq import PO2Acq
 import numpy as np
 import icons_rc
 from base.liomio import DataSaver
@@ -34,7 +37,6 @@ from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 
 import threading
-
 '''
 from scipy import ndimage
 import zaber.serial
@@ -56,7 +58,7 @@ class GalvosController(QWidget):
     def __init__(self):
         QWidget.__init__(self)
         basepath= os.path.join(os.path.dirname(__file__))
-        uic.loadUi(os.path.join(basepath,"galvos_form.ui"), self)
+        uic.loadUi(os.path.join(basepath,"galvos_form_NEW.ui"), self)
 
         # Mechanical shutters
         self.shutter2ph_closed = True                      
@@ -93,6 +95,10 @@ class GalvosController(QWidget):
         self.horizontalScrollBar_power2ph.valueChanged.connect(self.setPower2ph)
         self.horizontalScrollBar_power3ph.valueChanged.connect(self.setPower3ph)
         self.pushButton_set_3Ph_power_minimum.clicked.connect(self.setMinimumPower3ph)
+        self.pushButton_set_3Ph_power_maximum.clicked.connect(self.setMaximumPower3ph)
+        self.pushButton_reset_3Ph_wheel.clicked.connect(self.resetWheel3ph)
+        self.wheel3PMax=360.0
+
         self.wheel3P_angle_offset=0 #offset of 10 degrees
         
         # Galvos
@@ -131,11 +137,7 @@ class GalvosController(QWidget):
         self.pushButton_center.setEnabled(False)
         self.brainPosSetFlag = 0
         
-        #Saving:
-        self.pushButton_select_save_directory.clicked.connect(self.select_saving_directory)
-        self.lineEdit_mouse_name.setEnabled(False)
 
-        self.checkBox_enable_save.setEnabled(False)
         
         #Stack acquisition:
         self.pushButton_start_stack.clicked.connect(self.start_stack_thread)
@@ -156,15 +158,13 @@ class GalvosController(QWidget):
         self.stackNumber=0
         
         #Line scan acquistion:
-        self.pushButton_show_line.clicked.connect(self.toggle_line)
         self.toggleLineFlag=0;
         self.pushButton_get_line_position.clicked.connect(self.update_linescan)
         self.lineEdit_nt.textChanged.connect(self.update_linescan)
         self.lineEdit_linerate_LS.textChanged.connect(self.update_linescan)
         self.pushButton_snap_angio.setEnabled(False)        
-        self.pushButton_start_linescan.setEnabled(False)
+        self.pushButton_start_linescan.setEnabled(True)
         self.pushButton_stop_linescan.setEnabled(False)
-        self.pushButton_get_line_position.setEnabled(False)
         self.pushButton_snap_angio.clicked.connect(self.take_snapshot)
         
         self.horizontalScrollBar_line_scan_shift_y.setValue(-20)
@@ -187,6 +187,11 @@ class GalvosController(QWidget):
         self.previewScanFlag = False
         self.linescan_shift_display=0
         
+        # PO2 acquisition
+        self.po2_x_positions = None
+        self.po2_y_positions = None
+        self.pushButton_startPO2.clicked.connect(self.start_po2_scan)
+        
         #Channel 1 - 2: display
         self.pushButton_Channel_1.clicked.connect(self.showChannel1)
         self.pushButton_Channel_2.clicked.connect(self.showChannel2)
@@ -199,6 +204,26 @@ class GalvosController(QWidget):
         self.pushButton_clear_curve.clicked.connect(self.clearCurve)
         self.checkBoxPowerCurve.setEnabled(False)
         self.pushButton_add_power_val.setEnabled(False)
+        self.pushButton_show_curve.clicked.connect(self.showPowerCurve)
+        self.pushButton_show_curve.setEnabled(False)
+
+        #Power curve 3P:
+        self.positionVector3P=[]
+        self.powerVector3P=[]
+        
+        self.pushButton_add_power_val_3P.clicked.connect(self.addPowerValue3P)
+        self.pushButton_clear_curve_3P.clicked.connect(self.clearCurve3P)
+        self.pushButton_add_power_val_3P.setEnabled(False)
+        self.pushButton_show_curve3P.clicked.connect(self.showPowerCurve3P)
+        self.pushButton_show_curve3P.setEnabled(False)
+        self.checkBoxPowerCurve3P.setEnabled(False)
+
+
+        #Saving:
+        self.pushButton_select_save_directory.clicked.connect(self.select_saving_directory)
+        self.lineEdit_mouse_name.setEnabled(False)
+
+        self.checkBox_enable_save.setEnabled(False)
 
         #Save folder:
         self.pushButton_set_save_name.setEnabled(False)
@@ -211,15 +236,144 @@ class GalvosController(QWidget):
         
         #Multiple lines:
         self.pushButtonAddLine.clicked.connect(self.addLines)
-        self.pushButtonDeleteLastLine.clicked.connect(self.removeLastLine)
         self.pushButtonShowLines.clicked.connect(self.displayLines)
         self.toggleDisplayLines = 1
-        self.pushButtonStartMultipleLineAcq.clicked.connect(self.start_multiple_lines)
-        self.pushButtonStopMultipleLineAcq.clicked.connect(self.stop_multiple_lines)
+        #self.pushButtonStartMultipleLineAcq.clicked.connect(self.start_multiple_lines)
+        #self.pushButtonStopMultipleLineAcq.clicked.connect(self.stop_multiple_lines)
         self.pushButtonStopMultipleLineAcq.setEnabled(False)
         self.pushButtonStartMultipleLineAcq.setEnabled(False)
         self.pushButtonShowLines.setEnabled(False)
-        self.pushButtonDeleteLastLine.setEnabled(False)
+
+        self.pushButtonStartMultipleLineAcq.clicked.connect(self.startlinescanTimer)
+        self.pushButtonStopMultipleLineAcq.clicked.connect(self.abortlinescanTimer)
+        
+        #preview:
+        self.pushButton_preview.clicked.connect(self.changeDisplayValues)
+        self.previewFlag=0;
+        
+        #calibrateFOV
+        #self.pushButton_calibrateFOV.setEnabled(False)
+        #self.pushButton_calibrateFOV.clicked.connect(self.runFOVCalibration)
+        #self.pushButton_calibrateX.clicked.connect(self.runCalibrationX)
+        #self.pushButton_calibrateY.clicked.connect(self.runCalibrationY)
+        
+        #self.pushButtonRefImageX.clicked.connect(self.runReferenceX)
+        #self.pushButtonRefImageY.clicked.connect(self.runReferenceY)
+               
+        #self.pushButtonMoveX.clicked.connect(self.calibMoveX)
+        #self.pushButtonMoveY.clicked.connect(self.calibMoveY)       
+                
+        self.runCalX=False
+        self.runCalY=False
+        
+        #PO2:
+        self.pushButton_defineROI.clicked.connect(self.defineROI_PO2)
+        self.pushButton_GenerateGrid.clicked.connect(self.generateGrid_PO2)
+        self.numberOfPoints=0
+        self.horizontalScrollBar_xPoints.setValue(1)
+        self.horizontalScrollBar_yPoints.setValue(1)
+        self.horizontalScrollBar_xPoints.valueChanged.connect(self.modifyGrid_PO2)
+        self.horizontalScrollBar_yPoints.valueChanged.connect(self.modifyGrid_PO2)
+        self.numberOfXPoints=3
+        self.numberOfYPoints=4
+        
+        
+    #PO2 functons:
+    
+    def defineROI_PO2(self):
+        nx=float(self.lineEdit_nx.text())
+        ny=float(self.lineEdit_ny.text())
+        self.viewer.createRectangle(nx,ny)
+        self.viewer.displayRectangles()
+    
+    def generateGrid_PO2(self):
+        [x_o,y_o,width,height]=self.viewer.getMouseSelectedRectPosition()
+        self.nx=float(self.lineEdit_nx.text())
+        self.ny=float(self.lineEdit_ny.text())
+        self.n_extra=float(self.lineEdit_extrapoints.text())
+        self.width=float(self.lineEdit_width.text())
+        self.height=float(self.lineEdit_height.text())
+        
+        if (x_o!=0 and (y_o!=0) and (width!=0) and (height)):
+            self.oldNumberOfPoints=self.numberOfYPoints*self.numberOfXPoints
+            x_pos=(np.linspace(x_o, x_o+width, num=self.numberOfXPoints))
+            y_pos=(np.linspace(y_o, y_o+height, num=self.numberOfYPoints))
+            y_pos_grid=np.zeros(x_pos.shape[0]*y_pos.shape[0])
+            x_pos_grid=np.zeros(x_pos.shape[0]*y_pos.shape[0])
+            counter=0
+            for i in range(x_pos.shape[0]):
+                for j in range(y_pos.shape[0]):
+                    
+                    
+                    y_pos_grid[counter]=(y_pos[j]-self.ny/2)*self.height/self.ny
+                    x_pos_grid[counter]=(x_pos[i]-self.nx/2)*self.width/self.nx
+                    print('coords:')
+                    print(str(y_pos_grid[counter])+';'+str(x_pos_grid[counter]))
+                    counter=counter+1
+            x_pos_grid.astype(int)
+            y_pos_grid.astype(int)
+            self.po2_x_positions = x_pos_grid
+            self.po2_y_positions = y_pos_grid
+            for i in x_pos:
+                for j in y_pos:
+                    self.viewer.createPoint(i,j)
+            self.viewer.displayPoints()
+
+    def modifyGrid_PO2(self):
+        self.viewer.removeAllPoints()
+        self.numberOfXPoints=self.horizontalScrollBar_xPoints.value()
+        self.numberOfYPoints=self.horizontalScrollBar_yPoints.value()
+        self.lineEdit_numXpoints.setText(str(self.numberOfXPoints))
+        self.lineEdit_numYpoints.setText(str(self.numberOfYPoints))
+        self.generateGrid_PO2()
+        
+    def start_po2_scan(self):
+        # Fermer EOM manuel
+        self.power_ao_eom.ClearTask()
+        del(self.power_ao_eom)
+        # Steps
+        gate_on = float(self.lineEdit_po2_gate_on.text())
+        gate_off = float(self.lineEdit_po2_gate_off.text())
+        voltage_on = 1.0
+        n_averages = int(self.lineEdit_n_po2_averages.text())
+        
+        eom_task = PO2Acq(config.eom_device, config.eom_ao, gate_on, gate_off, voltage_on, n_averages)
+        eom_task.config()
+        # Acquire list of points to move to
+        self.galvos.configOnDemand()
+        # Loop over points and:
+        for i in range(self.po2_x_positions.shape[0]):
+            self.galvos.moveOnDemand(self.po2_x_positions[i], self.po2_y_positions[i])
+            eom_task.start()
+            #time.sleep(1)
+            print(str(self.po2_x_positions[i])+';'+str(self.po2_y_positions[i]))
+
+        #    Start acquisition task averaging doing a finite ao task reapeated n average times
+        #    Show in a plot the Decay curve
+        eom_task.close()
+        self.galvos.ao_task.StopTask()
+        self.galvos.ao_task.ClearTask()
+        # Remettre EOM Manuel
+        self.power_ao_eom = OnDemandVoltageOutTask(config.eom_device, config.eom_ao, 'Power2Ph')
+        
+    #PREVIEW VALUES
+    def changeDisplayValues(self):
+        if self.previewFlag==0:
+            self.nxTemp=self.lineEdit_nx.text()
+            self.nyTemp=self.lineEdit_ny.text()
+            self.linerateTemp=self.lineEdit_linerate.text()    
+            self.lineEdit_nx.setText('256')
+            self.lineEdit_ny.setText('256')
+            self.lineEdit_linerate.setText('300')            
+            self.pushButton_preview.setText('Undo')
+            self.previewFlag=1
+        else: 
+            self.lineEdit_nx.setText(self.nxTemp)
+            self.lineEdit_ny.setText(self.nxTemp)
+            self.lineEdit_linerate.setText(self.linerateTemp)            
+            self.pushButton_preview.setText('Preview')
+            self.previewFlag=0
+            
         
     #IMAGE VIEWER FUNCTIONS:    
         
@@ -241,6 +395,9 @@ class GalvosController(QWidget):
         self.viewer.addLines()
         self.updateNumberOfLines()
 
+    def removeSelectedLine(self):
+        self.viewer.removeSelectedLine()
+        self.updateNumberOfLines()
         
     def removeLastLine(self):
         self.viewer.removeLastLine()
@@ -268,37 +425,26 @@ class GalvosController(QWidget):
         if self.numberOfLines>0:
             self.pushButtonStartMultipleLineAcq.setEnabled(True)
             self.pushButtonShowLines.setEnabled(True)
-            self.pushButtonDeleteLastLine.setEnabled(True)
         else:
             self.pushButtonStartMultipleLineAcq.setEnabled(False)
             self.pushButtonShowLines.setEnabled(False)
-            self.pushButtonDeleteLastLine.setEnabled(False)
-
-    #SAVING FUNCTIONS:    
-        
-    def set_save_folder(self):
-        print('Select directory for new folder')
-        options = QFileDialog.Options()
-        options |= QFileDialog.DontResolveSymlinks
-        options |= QFileDialog.ShowDirsOnly        
-        self.save_directory = QFileDialog.getExistingDirectory(self,"Choose Directory","", options=options)
-        self.lineEdit_save_name.setEnabled(True)
-        self.pushButton_set_save_name.setEnabled(True)
-        
-    def create_new_folder(self):
-        self.saveName=str(self.save_directory)+str(self.lineEdit_save_name.text())+'.hdf5'
-        f = h5py.File(self.saveName, "w")
         
     #POWER CURVE:    
         
     def togglePowerCurve(self,status):
         self.checkBoxPowerCurve.setEnabled(status)
+        
+    def toggleShowCurve(self,status):
+        self.pushButton_show_curve.setEnabled(status)
+
+
 
     def clearCurve(self):
         self.positionVector=[]
         self.powerVector=[]
         self.togglePowerCurve(False)
-        
+        self.toggleShowCurve(False)
+       
     def addPowerValue(self):
         self.get_current_z_depth()
         currentPowerValue=self.horizontalScrollBar_power2ph.value()
@@ -312,27 +458,90 @@ class GalvosController(QWidget):
         
         if len(self.positionVector)==4:
             self.togglePowerCurve(True)
+            self.toggleShowCurve(True)
+
 
     def generatePowerCurve(self):
-        self.positionVector = np.array(self.positionVector)
-        self.powerVector = np.array(self.powerVector).astype(float)
+        self.positionVectorArray = np.array(self.positionVector)
+        self.powerVectorArray = np.array(self.powerVector).astype(float)
         self.zstep=float(self.lineEdit_zstep.text())
         self.depthVector=np.arange(0,1000.0,self.zstep)/1000.0
         
-        f2 = interp1d(self.positionVector, self.powerVector, kind='cubic',fill_value='extrapolate')
+        f2 = interp1d(self.positionVectorArray, self.powerVectorArray, kind='cubic',fill_value='extrapolate')
         self.powerCurve=f2(self.depthVector)
         self.powerCurve[self.powerCurve >= 100] = 100
         
+    def showPowerCurve(self):  
+        fig, ax = plt.subplots()        
+        self.generatePowerCurve()
+        ax.plot(self.depthVector, self.powerCurve)
+        ax.plot(self.positionVector,self.powerVector,linestyle="None", marker='o', color='r')
+        ax.grid(True)
+        plt.xlabel('axial position [mm]')
+        plt.ylabel('power [%]')
+        plt.title('Power curve 2P')
+        plt.ylim(0,110)
+        plt.show()
+
+    #POWER CURVE:    
+        
+    def togglePowerCurve3P(self,status):
+        self.checkBoxPowerCurve3P.setEnabled(status)
+
+    def toggleShowCurve3P(self,status):
+        self.pushButton_show_curve3P.setEnabled(status)
+
+    def clearCurve3P(self):
+        self.positionVector3P=[]
+        self.powerVector3P=[]
+        self.togglePowerCurve3P(False)
+        self.toggleShowCurve3P(False)
+
+        
+    def addPowerValue3P(self):
+        self.get_current_z_depth()
+        currentPowerValue3P=self.horizontalScrollBar_power3ph.value()
+        
+        self.positionVector3P.append(self.currentZPos)
+        self.powerVector3P.append(currentPowerValue3P)
+        
+        self.lineEdit_current_depth_3P.setText(str(self.currentZPos))
+        txt= str(currentPowerValue3P) + '%'
+        self.lineEdit_current_power_3P.setText(txt)
+        
+        if len(self.positionVector3P)==4:
+            self.togglePowerCurve3P(True)
+            self.toggleShowCurve3P(True)
+
+    def generatePowerCurve3P(self):
+        self.positionVector3Parray = np.array(self.positionVector3P)
+        self.powerVector3Parray = np.array(self.powerVector3P).astype(float)
+        self.zstep=float(self.lineEdit_zstep.text())
+        self.depthVector3P=np.arange(0,1000.0,self.zstep)/1000.0
+        
+        f2 = interp1d(self.positionVector3Parray, self.powerVector3Parray, kind='cubic',fill_value='extrapolate')
+        self.powerCurve3P=f2(self.depthVector3P)
+        self.powerCurve3P[self.powerCurve3P >= 100] = 100
+
+    def showPowerCurve3P(self):  
+        fig, ax = plt.subplots()        
+        self.generatePowerCurve3P()
+        ax.plot(self.depthVector3P, self.powerCurve3P)
+        ax.plot(self.positionVector3P,self.powerVector3P,linestyle="None", marker='o', color='r')
+        ax.grid(True)
+        plt.xlabel('axial position [mm]')
+        plt.ylabel('power [%]')
+        plt.title('Power curve 3P')
+        plt.ylim(0,110)
+        plt.show()                
     #LINE SCAN FUNCTIONS:
 
     def toggle_line(self):
         self.viewer.toggleLinearSelection()
         if self.toggleLineFlag==0:
-            self.pushButton_show_line.setText('Hide Line')
             self.toggleLineFlag=1
             self.toggle_linescanDisplayButton(False)
         else:        
-            self.pushButton_show_line.setText('Show Line')
             self.toggle_linescanDisplayButton(True)
             self.toggleLineFlag=0
             
@@ -356,23 +565,26 @@ class GalvosController(QWidget):
         self.pushButton_get_line_position.setEnabled(val)
             
     def update_linescan(self):
-        linescan_width=self.get_line_pos()
-        self.lineEdit_line_scan_width.setText(str(linescan_width))
-                
+        linescan_width, center_x, center_y=self.get_line_pos()
+        self.lineEdit_line_scan_width.setText(str(round(linescan_width,2)))
+                 
         n_lines=float(self.lineEdit_nt.text())   
         line_rate=float(self.lineEdit_linerate_LS.text())     
         linescan_totalTime=n_lines/line_rate
         self.lineEdit_line_scan_time.setText(str(linescan_totalTime))        
-        
+         
         linescan_shift_x=float(self.horizontalScrollBar_line_scan_shift_x.value()) 
         self.lineEdit_linescan_shift_x.setText(str(linescan_shift_x))
         linescan_shift_y=float(self.horizontalScrollBar_line_scan_shift_y.value()) 
         self.lineEdit_linescan_shift_y.setText(str(linescan_shift_y)) 
         self.linescan_shift_display=int(self.horizontalScrollBar_line_scan_shift_display.value()) 
         self.lineEdit_linescan_shift_display.setText(str(self.linescan_shift_display)) 
+         
+        self.lineEdit_CentralPosition.setText(str(round(center_x,2))+' / '+str(round(center_y,2)))      
+
         
     def get_line_pos(self):
-        linescan_px_x_1, linescan_px_y_1, linescan_px_x_2, linescan_px_y_2, linescan_length_px = self.viewer.getCurrentLinePosition()
+        linescan_px_x_1, linescan_px_y_1, linescan_px_x_2, linescan_px_y_2, linescan_length_px = self.viewer.getMouseSelectedLinePosition()
 
         nx=int(self.lineEdit_nx.text())   
         ny=int(self.lineEdit_ny.text())   
@@ -384,8 +596,18 @@ class GalvosController(QWidget):
         linescan_y_1_um=linescan_px_y_1/ny*height
         linescan_y_2_um=linescan_px_y_2/ny*height
         
+        center_x=(linescan_x_2_um+linescan_x_1_um)/2-width/2
+        center_y=(linescan_y_2_um+linescan_y_1_um)/2-height/2
+        
         linescan_width = math.sqrt(math.pow((linescan_x_2_um-linescan_x_1_um),2)+math.pow((linescan_y_2_um-linescan_y_1_um),2))
-        return linescan_width
+        
+        strCoord=str(center_x)+'/'+str(center_y)
+            
+        txtCoord = open(r"C:\git-projects\twophoton\coordinates.txt","w") 
+        txtCoord.write(strCoord)
+        txtCoord.close()
+        
+        return linescan_width, center_x, center_y
    
     def shift_x_changed_value(self, value):
         print('in x value changed function')
@@ -539,32 +761,67 @@ class GalvosController(QWidget):
         
     def setPower2ph(self,value):
         # Input value is 0-100%, needs to be mapped to 0-2V for EOM input
-        self.label_power2P.setText(str(value)+' %')
+        self.label_power2P.setText(str(int(value))+' %')
         eom_voltage=2.0*value/100.0
-        print eom_voltage
         self.power_ao_eom.write(eom_voltage)
     
     def setPower3ph(self,value):
         # Input value is 0-100%, needs to be mapped to 0-2V for EOM input
         if self.flagWheel == 1:
-            self.label_power3P.setText(str(value)+' %')
-            wheel3P_angle=360.0*value/100.0
+            self.label_power3P.setText(str(int(value))+' %')
+            wheel3P_angle=self.wheel3PMax*value/100
             command = self.wheel3P_angle_offset+wheel3P_angle
             self.flagWheel = 0
             thread = threading.Thread(target=self.wheel_run, args=(command,))
             thread.start()
         
+    def setPower3ph_noThread(self,value):
+        if self.flagWheel == 1:
+            self.label_power3P.setText(str(int(value))+' %')
+            wheel3P_angle=self.wheel3PMax*value/100
+            command = self.wheel3P_angle_offset+wheel3P_angle
+            self.flagWheel = 0
+            self.wheel_run(command)
+   
+        
     def setMinimumPower3ph(self):
         print('set minimum...')
-        self.wheel3P_angle_offset=self.wheel3P_angle_offset+(360.0*self.horizontalScrollBar_power3ph.value()/100.0-10)
+        self.wheel3P_angle_offset=self.wheel3P_angle_offset+(360.0*self.horizontalScrollBar_power3ph.value()/100.0)
         print('half done...')
         self.horizontalScrollBar_power3ph.setValue(0)
         print('done!')
         
+    def setMaximumPower3ph(self):
+        print('set maximum...')        
+        self.wheel3PMax=360.0*self.horizontalScrollBar_power3ph.value()/100
+        self.horizontalScrollBar_power3ph.setValue(100)
+        print(str(self.wheel3PMax))
+        print('done!')   
+        
+    def resetWheel3ph(self):
+        self.wheel3P_angle_offset=0
+        self.wheel3PMax=360
+        self.horizontalScrollBar_power3ph.setValue(0)
+
+    def gotoMaximumPower3ph(self):
+        print('going to maximum value with 3Ph motors...')
+        wheel3P_angle=self.wheel3PMax
+        command = self.wheel3P_angle_offset+wheel3P_angle
+        self.flagWheel = 0
+        thread = threading.Thread(target=self.wheel_run, args=(command,))
+        thread.start()
+        self.horizontalScrollBar_power3ph.setValue(100)
+        print('done!')   
+
+    def turnOffWheel3P(self):
+        self.shutter3ph.off() 
+        self.gotoMaximumPower3ph()
+
     def wheel_run(self,command):
         print "Starting rotation:"
         self.thorlabs.setpos(command)
         self.flagWheel = 1
+        print "Wheel rotation done!"
         
 #FUNCTIONS SETTING CLASSES:
         
@@ -609,6 +866,112 @@ class GalvosController(QWidget):
  
 #FUNCTIONS MOTORS:
  
+    def runReferenceX(self):
+        #width=float(self.lineEdit_width.text())  
+        #height=float(self.lineEdit_height.text())                  
+        #self.start_snapshot(0,0,width,height)
+        #time.sleep(5)
+        self.refImageX=self.viewer.getCurrentImage()
+        self.refImageX=self.refImageX[100:-100,100:-100]
+        self.pushButtonMoveX.setEnabled(True)
+        
+    def runReferenceY(self):
+        #height=float(self.lineEdit_height.text())                  
+        #width=float(self.lineEdit_width.text())   
+        #self.start_snapshot(0,0,width,height)
+        #time.sleep(5)
+        self.refImageY=self.viewer.getCurrentImage()
+        self.refImageY=self.refImageY[100:-100,100:-100]
+        self.pushButtonMoveY.setEnabled(True)
+        
+    def calibMoveX(self):
+        width=float(self.lineEdit_width.text())      
+        print('move in x...')
+        self.cal_x_step=round(width/20)
+        self.motors.move_dx(self.cal_x_step/1000)
+        self.pushButton_calibrateX.setEnabled(True)
+    
+    def calibMoveY(self):
+        height=float(self.lineEdit_height.text())                  
+        print('move in x...')
+        self.cal_y_step=round(height/20)
+        self.motors.move_dy(self.cal_y_step/1000)
+        self.pushButton_calibrateY.setEnabled(True)
+
+    def runCalibrationX(self):
+        height=float(self.lineEdit_height.text())                  
+        width=float(self.lineEdit_width.text())      
+        print('acquire image...')
+        #self.start_snapshot(0,0,width,height)
+        self.xShiftedImage=self.viewer.getCurrentImage()     
+        self.xShiftedImage=self.xShiftedImage[100:-100,100:-100]   
+        print('done!')
+        self.runCalX=True
+        if (self.runCalY and self.runCalX):
+            self.pushButton_calibrateFOV.setEnabled(True)
+ 
+    def runCalibrationY(self):
+        height=float(self.lineEdit_height.text())                  
+        width=float(self.lineEdit_width.text())         
+        print('acquire image...')
+        #self.start_snapshot(0,0,width,height)
+        self.yShiftedImage=self.viewer.getCurrentImage() 
+        self.yShiftedImage=self.yShiftedImage[100:-100,100:-100]
+        print('done!')
+        self.runCalY=True
+        if (self.runCalY and self.runCalX):
+            self.pushButton_calibrateFOV.setEnabled(True)
+
+    def runFOVCalibration(self):
+
+        #1. take reference image:
+        width=float(self.lineEdit_width.text())          
+        height=float(self.lineEdit_height.text()) 
+        nx=int(self.lineEdit_nx.text())       
+        ny=int(self.lineEdit_ny.text())
+               
+        print('Cross-corr analysis:')
+        print('X axis...')
+        tempX=self.refImageX[(nx/2-75):(nx/2+75),(ny/2-75):(ny/2+75)]
+        corrX = signal.correlate2d(self.xShiftedImage, tempX, boundary='symm', mode='same')
+        y, x = np.unravel_index(np.argmax(corrX), corrX.shape) # find the match
+        y=abs(y-ny/2)
+        x=abs(x-nx/2)
+        print(str(x)+' + '+str(y))
+        if x>=y:
+            shiftX=float(x)/float(nx)*width
+        else:
+            shiftX=float(y)/float(nx)*width
+        print(str(shiftX))
+        ratioX=self.cal_x_step/shiftX
+        print('ratioX =' + str(ratioX))
+        #y-shifting:
+        print('Y axis...')
+        tempY=self.refImageY[(nx/2-75):(nx/2+75),(ny/2-75):(ny/2+75)]
+        corrY = signal.correlate2d(self.yShiftedImage, tempY, boundary='symm', mode='same')
+        y, x = np.unravel_index(np.argmax(corrY), corrY.shape) # find the match
+        y=abs(y-ny/2)
+        x=abs(x-nx/2)
+        
+        print(str(x)+' + '+str(y))
+        if x>=y:
+            shiftY=float(x)/float(ny)*height
+        else:
+            shiftY=float(y)/float(ny)*height
+        print(str(shiftY))    
+        ratioY=self.cal_y_step/shiftY
+        print('ratioY =' + str(ratioY))
+        
+        
+        fig, ((ax_shiftx, ax_refx), (ax_shifty, ax_refy), (ax_corrx, ax_corry)) = plt.subplots(3, 2,figsize=(6, 15))
+        ax_shiftx.imshow(self.xShiftedImage, cmap='gray')
+        ax_shifty.imshow(self.yShiftedImage, cmap='gray')
+        ax_refx.imshow(self.refImageX, cmap='gray')
+        ax_refy.imshow(self.refImageY, cmap='gray')        
+        ax_corrx.imshow(corrX, cmap='gray')
+        ax_corry.imshow(corrY, cmap='gray')            
+        fig.show()
+        
     def set_brain_pos_reset(self):       
         print 'set_brain_pos: in function'
         self.brain_pos=self.motors.get_pos(3)
@@ -627,6 +990,7 @@ class GalvosController(QWidget):
         self.lineEdit_brain_pos.setText(self.brain_pos)
         self.brainPosSetFlag = 1
         self.pushButton_add_power_val.setEnabled(True)
+        self.pushButton_add_power_val_3P.setEnabled(True)
         
     def get_current_z_depth(self):
         print 'in current z depth'
@@ -661,25 +1025,30 @@ class GalvosController(QWidget):
 
 #FUNCTIONS SCANNING:
         
-    def startlinescan(self):
-        self.toggle_shutter2ph()
-        self.viewer.toggleLinearSelection()
-        self.make_connection_offset_X()
-        self.make_connection_offset_Y()
-        self.make_connection_offset_Display()
-        self.get_current_z_depth()
+    def startlinescanTimer(self):
+        self.currentLine = 0
+        self.timerLS = pg.QtCore.QTimer()
+        self.timerLS.timeout.connect(self.stoplinescanTimer)
+        timeOffset=1.1 #offset of seconds measured   
+        self.timestep=(float(self.lineEdit_TimePerLine.text())+timeOffset)*1000
+        self.runlinescanTimer()
+        print('timestep of:' + str(int(self.timestep)))
+        self.hideLines()
         
-        if self.previewScanFlag == True:
-            self.stopscan()
-            self.toggle_shutter2ph()
-        
-        self.pushButton_start_linescan.setEnabled(False)
-        self.pushButton_stop_linescan.setEnabled(True)
-        self.pushButton_show_line.setEnabled(False)
-        self.pushButton_get_line_position.setEnabled(False)
-        
-        x_0_px, y_0_px, x_e_px, y_e_px, linescan_length_px = self.viewer.getCurrentLinePosition()
+    def runlinescanTimer(self):
 
+        self.timerLS.start(self.timestep)        
+        
+        self.pushButtonStartMultipleLineAcq.setEnabled(False)
+        self.pushButtonStopMultipleLineAcq.setEnabled(True)
+        print('in START MULTIPLE LINES // TIMER')  
+        self.toggle_shutter2ph()
+        self.get_current_z_depth()
+        self.updateNumberOfLines()
+        self.galvos.setFinite(False)
+ 
+        x_0_px, y_0_px, x_e_px, y_e_px, linescan_length_px = self.viewer.getSelectedLinePosition(self.currentLine)
+        
         nx_preview=int(self.lineEdit_nx.text())
         ny_preview=int(self.lineEdit_ny.text())
         width=float(self.lineEdit_width.text())
@@ -710,11 +1079,11 @@ class GalvosController(QWidget):
         
         linescan_width_um = math.sqrt(math.pow((x_e_um-x_0_um),2)+math.pow((y_e_um-y_0_um),2))
         
-        shift_display=self.linescan_shift_display
+        shift_display=self.horizontalScrollBar_line_scan_shift_display.value()
+        #shift_display=self.linescan_shift_display
                 
         self.galvos.setLineRamp(y_0_um,x_0_um,y_e_um,x_e_um,npts,n_lines,n_extra,line_rate,shift_display)
         self.galvos_stopped = False
-        self.pushButton_start.setEnabled(False)
 
         if self.checkBox_enable_save.isChecked():
             self.data_saver=DataSaver(self.save_filename)
@@ -751,7 +1120,140 @@ class GalvosController(QWidget):
             self.ai_task.setDataConsumer(self.data_saver,True,0)
             self.ai_task.setDataConsumer(self.data_saver,True,1)
             self.data_saver.startSaving()
-        self.galvos.startTask()
+        self.updateLineAcqTimer()
+        self.galvos.startTask()        
+
+    def updateLineAcqTimer(self):
+        txt='Acquiring Line '+str(self.currentLine+1)+' out of '+str(self.numberOfLines)
+        self.label_lineScanAcq.setText(txt)
+
+    def abortlinescanTimer(self):
+        print('Abort linescan')
+        self.currentLine=self.numberOfLines-1
+        self.stoplinescanTimer()
+            
+       
+    def stoplinescanTimer(self):
+        #check if this is last line or not:
+        self.timerLS.stop()
+        self.toggle_shutter2ph()
+        self.galvos.stopTask()    
+        self.galvos_stopped = True     
+        if self.checkBox_enable_save.isChecked():
+            self.data_saver.stopSaving()
+            
+        print('finished line: ' + str(self.currentLine+1) + ' out of ' + str(self.numberOfLines))
+            
+        if (self.numberOfLines==self.currentLine+1):
+            print('finished all acquisitions!')
+            self.viewer.displayLines()
+            self.pushButton_start_linescan.setEnabled(True)
+            self.pushButton_stop_linescan.setEnabled(False)
+            self.pushButton_get_line_position.setEnabled(True)
+            self.pushButton_start.setEnabled(True)      
+            self.currentLine=0
+        else:
+            time.sleep(2)
+            self.currentLine = self.currentLine + 1
+            self.runlinescanTimer()
+            print('running next acquisition:...')
+            
+        
+    def startlinescan(self):
+        x_0_px, y_0_px, x_e_px, y_e_px, linescan_length_px = self.viewer.getMouseSelectedLinePosition()
+
+        if (x_0_px==0 and y_0_px==0 and x_e_px==0 and y_e_px==0):
+            print("no lines selected!")
+        else:
+            
+            self.toggle_shutter2ph()
+            self.viewer.toggleLinearSelection()
+            self.make_connection_offset_X()
+            self.make_connection_offset_Y()
+            self.make_connection_offset_Display()
+            self.get_current_z_depth()
+        
+            if self.previewScanFlag == True:
+                self.stopscan()
+                self.toggle_shutter2ph()
+        
+            self.pushButton_start_linescan.setEnabled(False)
+            self.pushButton_stop_linescan.setEnabled(True)
+            self.pushButton_get_line_position.setEnabled(False)
+            
+            nx_preview=int(self.lineEdit_nx.text())
+            ny_preview=int(self.lineEdit_ny.text())
+            width=float(self.lineEdit_width.text())
+            height=float(self.lineEdit_height.text())
+            
+            self.linescan_shift_x=float(self.horizontalScrollBar_line_scan_shift_x.value())
+            x_0_px=x_0_px+self.linescan_shift_x
+            x_e_px=x_e_px+self.linescan_shift_x
+            
+            self.linescan_shift_y=float(self.horizontalScrollBar_line_scan_shift_y.value())
+            y_0_px=y_0_px+self.linescan_shift_y
+            y_e_px=y_e_px+self.linescan_shift_y
+            
+            x_0_um=(x_0_px/nx_preview*width)-width/2
+            x_e_um=(x_e_px/nx_preview*width)-width/2
+            y_0_um=(y_0_px/ny_preview*height)-height/2
+            y_e_um=(y_e_px/ny_preview*height)-height/2 
+    
+            x_mean_px=(x_0_px+x_e_px)/2
+            y_mean_px=(y_0_px+y_e_px)/2
+            x_mean_um=(x_0_um+x_e_um)/2
+            y_mean_um=(y_0_um+y_e_um)/2
+            
+            npts=int(self.lineEdit_nr.text())   
+            n_lines=int(self.lineEdit_nt.text())   
+            n_extra=int(self.lineEdit_extrapoints_LS.text())   
+            line_rate=int(self.lineEdit_linerate_LS.text())   
+            
+            linescan_width_um = math.sqrt(math.pow((x_e_um-x_0_um),2)+math.pow((y_e_um-y_0_um),2))
+            
+            shift_display=self.linescan_shift_display
+                    
+            self.galvos.setLineRamp(y_0_um,x_0_um,y_e_um,x_e_um,npts,n_lines,n_extra,line_rate,shift_display)
+            self.galvos_stopped = False
+            self.pushButton_start.setEnabled(False)
+    
+            if self.checkBox_enable_save.isChecked():
+                self.data_saver=DataSaver(self.save_filename)
+                self.mouseName=self.lineEdit_mouse_name.text()
+                self.scanType = 'LineScan'      
+                self.pathRoot = posixpath.join('/',self.mouseName,self.scanDate,self.scanType)
+                
+                self.lineScanNumber = self.data_saver.checkAlreadyExistingFiles(self.pathRoot,self.scanType)
+                self.lineEdit_linescan_acq.setText(str(self.lineScanNumber))
+                self.scanNumber = self.scanType+'_'+str(self.lineScanNumber) 
+                self.pathName = posixpath.join(self.pathRoot,self.scanNumber)
+                self.data_saver.setDatasetName(self.pathName)    
+                self.data_saver.addAttribute('npts',npts)
+                self.data_saver.addAttribute('n_lines',n_lines)
+                self.data_saver.addAttribute('n_extra',n_extra)
+                self.data_saver.addAttribute('width',width)
+                self.data_saver.addAttribute('height',height)            
+                self.data_saver.addAttribute('line_rate',line_rate)   
+                self.data_saver.addAttribute('scantype',self.comboBox_scantype.currentText())  
+                self.data_saver.addAttribute('x_0_px',x_0_px)            
+                self.data_saver.addAttribute('x_e_px',x_e_px)              
+                self.data_saver.addAttribute('y_0_px',y_0_px)            
+                self.data_saver.addAttribute('y_e_px',y_e_px)                
+                self.data_saver.addAttribute('x_mean_px',x_mean_px)            
+                self.data_saver.addAttribute('y_mean_px',y_mean_px) 
+                self.data_saver.addAttribute('x_0_um',x_0_um)            
+                self.data_saver.addAttribute('x_e_um',x_e_um)              
+                self.data_saver.addAttribute('y_0_um',y_0_um)            
+                self.data_saver.addAttribute('y_e_um',y_e_um)                
+                self.data_saver.addAttribute('x_mean_um',x_mean_um)            
+                self.data_saver.addAttribute('y_mean_um',y_mean_um) 
+                self.data_saver.addAttribute('depth',self.currentZPos)
+                self.data_saver.setBlockSize(512)          
+                self.ai_task.setDataConsumer(self.data_saver,True,0)
+                self.ai_task.setDataConsumer(self.data_saver,True,1)
+                self.data_saver.startSaving()
+            self.galvos.startTask()
+
 
     def stoplinescan(self):
         self.toggle_shutter2ph()
@@ -759,7 +1261,6 @@ class GalvosController(QWidget):
         
         self.pushButton_start_linescan.setEnabled(True)
         self.pushButton_stop_linescan.setEnabled(False)
-        self.pushButton_show_line.setEnabled(True)
         self.pushButton_get_line_position.setEnabled(True)
         if self.checkBox_enable_save.isChecked():
             self.data_saver.stopSaving()
@@ -1230,6 +1731,8 @@ class GalvosController(QWidget):
     def start_stack_thread(self):
         if self.checkBoxPowerCurve.isChecked():
             self.generatePowerCurve()
+        if self.checkBoxPowerCurve3P.isChecked():
+            self.generatePowerCurve3P()
         #self.stackNumber=self.stackNumber+1;
         self.pushButton_start_stack.setEnabled(False)
         self.pushButton_stop_stack.setEnabled(True)
@@ -1298,6 +1801,8 @@ class GalvosController(QWidget):
             print 'starting saving'
             self.get_current_z_depth()
             self.lineEdit_current_depth.setText(str(self.currentZPos))
+            self.lineEdit_current_depth_3P.setText(str(self.currentZPos))
+
             self.data_saver.startSaving()
         #
         self.set_iteration_number(0)
@@ -1311,12 +1816,12 @@ class GalvosController(QWidget):
             txt= str(round(currentPowerValue,1)) + '%'
             self.lineEdit_current_power.setText(txt)
 
-        if self.checkBoxStack3P.isChecked():
-            currentPowerValue=self.powerCurve[0]
-            self.setPower3ph(currentPowerValue)
+        if self.checkBoxPowerCurve3P.isChecked():
+            currentPowerValue=self.powerCurve3P[0]
+            self.setPower3ph_noThread(currentPowerValue)
             self.horizontalScrollBar_power3ph.setValue(currentPowerValue)
             txt= str(round(currentPowerValue,1)) + '%'
-            self.lineEdit_current_power.setText(txt)
+            self.lineEdit_current_power_3P.setText(txt)
         
         print 'starting task'                    
         self.galvos.startTask()    
@@ -1353,16 +1858,20 @@ class GalvosController(QWidget):
                 print('power number: ' + str(self.powerIt))
                 if self.checkBoxPowerCurve.isChecked():
                     currentPowerValue=self.powerCurve[self.powerIt]
-                    print('power value: ' + str(round(currentPowerValue,1)) + '%')
+                    print('2P: power value: ' + str(round(currentPowerValue,1)) + '%')
                     if self.checkBoxStack2P.isChecked():
                         self.setPower2ph(currentPowerValue)
                         self.horizontalScrollBar_power2ph.setValue(currentPowerValue)
-                        
-                    if self.checkBoxStack3P.isChecked():
-                        self.setPower3ph(currentPowerValue)
-                        self.horizontalScrollBar_power3ph.setValue(currentPowerValue)
-                    txt= str(round(currentPowerValue,1)) + '%'
-                    self.lineEdit_current_power.setText(txt)
+                        txt= str(round(currentPowerValue,1)) + '%'
+                        self.lineEdit_current_power.setText(txt)
+                if self.checkBoxPowerCurve3P.isChecked():
+                    currentPowerValue3P=self.powerCurve3P[self.powerIt]
+                    print('3P: power value: ' + str(round(currentPowerValue3P,1)) + '%')
+                    if self.checkBoxStack3P.isChecked():                    
+                        self.setPower3ph_noThread(currentPowerValue3P)
+                        self.horizontalScrollBar_power3ph.setValue(currentPowerValue3P)
+                        txt= str(round(currentPowerValue3P,1)) + '%'
+                        self.lineEdit_current_power_3P.setText(txt)
             time.sleep(2)
             nx=int(self.lineEdit_nx.text())    
             ny=int(self.lineEdit_ny.text())   
@@ -1378,6 +1887,7 @@ class GalvosController(QWidget):
                 self.galvos.setLineRamp(self.center_x-width/2,self.center_y-height/2,self.center_x+width/2,self.center_y+height/2,nx,ny,n_extra,line_rate)    
             self.get_current_z_depth()
             self.lineEdit_current_depth.setText(str(self.currentZPos))
+            self.lineEdit_current_depth_3P.setText(str(self.currentZPos))
             self.make_connection(self.galvos.ao_task.signal_helper.aoDoneSignal)                
             self.galvos.startTask()
         else:
@@ -1397,7 +1907,7 @@ class GalvosController(QWidget):
             if self.checkBoxPowerCurve.isChecked():
                 self.setPower2ph(0)
                 self.horizontalScrollBar_power2ph.setValue(0)
-            if self.checkBoxStack3P.isChecked():
+            if self.checkBoxPowerCurve3P.isChecked():
                 self.setPower3ph(0)
                 self.horizontalScrollBar_power3ph.setValue(0)
             if self.checkBox_enable_save.isChecked():
@@ -1588,7 +2098,6 @@ class GalvosController(QWidget):
         
         self.save_filename,_ = QFileDialog.getOpenFileName(self,"Choose Saving File","","HDF5 Files (*.hdf5)", options=options)
 
-        
         #self.save_filename = QFileDialog.getExistingDirectory(self,"Choose Directory","", options=options)
         if self.save_filename:
             print(self.save_filename)
@@ -1601,3 +2110,19 @@ class GalvosController(QWidget):
         print(self.mouse_name)
         self.checkBox_enable_save.setEnabled(True)
         
+        
+    #SAVING FUNCTIONS:    
+        
+    def set_save_folder(self):
+        print('Select directory for new folder')
+        options = QFileDialog.Options()
+        options |= QFileDialog.DontResolveSymlinks
+        options |= QFileDialog.ShowDirsOnly        
+        self.save_directory = QFileDialog.getExistingDirectory(self,"Choose Directory","", options=options)
+        self.lineEdit_save_name.setEnabled(True)
+        self.pushButton_set_save_name.setEnabled(True)
+        
+    def create_new_folder(self):
+        self.save_filename=str(self.lineEdit_save_name.text())+'.hdf5'
+        self.lineEdit_mouse_name.setEnabled(True)
+        self.checkBox_enable_save.setEnabled(True)

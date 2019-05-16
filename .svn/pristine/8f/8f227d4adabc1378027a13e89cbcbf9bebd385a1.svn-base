@@ -1,0 +1,19 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sat Sep 12 14:15:03 2015
+
+@author: flesage
+"""
+import os
+import sys
+
+# This needs to be modified depending on machine
+anaconda_path = '/Users/flesage/anaconda'
+
+base_dir=os.path.dirname(os.path.dirname(sys.argv[0]))
+
+print base_dir
+# Generate uic/rc elements and move to gui folder
+os.system(os.path.join(anaconda_path,'bin/pyuic4 ')+os.path.join(base_dir,'liomacq_gui','oct_galvos_form.ui')+' -o '+ os.path.join(base_dir,'gui','ui_oct_galvos_form.py'))
+os.system(os.path.join(anaconda_path,'bin/pyrcc4 ')+os.path.join(base_dir,'liomacq_gui','icons.qrc')+' -o '+os.path.join(base_dir,'gui','icons_rc.py'))
+

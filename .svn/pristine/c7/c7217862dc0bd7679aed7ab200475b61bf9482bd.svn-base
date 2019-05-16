@@ -1,0 +1,74 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sat Sep 12 07:58:44 2015
+
+@author: flesage
+"""
+
+import pyqtgraph as pg
+import Queue
+import numpy as np
+import scipy.interpolate
+
+class ChannelViewer(Queue.Queue):
+    def __init__(self,name):
+        Queue.Queue.__init__(self,2)
+        self.name=name
+        self.imv = pg.ImageView(None,'name')
+        self.imv.show()
+
+    def update(self):
+        try:
+            data = self.get(False)
+            self.imv.setImage(data)
+        except Queue.Empty:
+            # Ignore and preserve previous state of display
+            pass
+
+
+class OCTViewer(ChannelViewer):
+    def __init__(self,name):
+        Queue.Queue.__init__(self,2)
+        self.name=name
+        self.imv = pg.ImageView(None,'name')
+        self.imv.show()
+        central_freq=870
+        spectro_width = 122
+        start_freq = central_freq-spectro_width/2
+        end_freq=central_freq+spectro_width/2
+        lambda_vec = np.linspace(start_freq,end_freq,1024)
+        nonlin_kvec = np.flipud(2*np.pi/lambda_vec)
+        lin_kvec =np.linspace(np.min(nonlin_kvec),np.max(nonlin_kvec),1024)
+        # Build interpolation matrix
+        self.interp_matrix = np.zeros((1024,1024))
+        for i in range(1024):
+            tmp=np.zeros((1,1024))
+            tmp[0,i]=1
+            f=scipy.interpolate.interp1d(nonlin_kvec,tmp)
+            self.interp_matrix[:,i]=f(lin_kvec)
+
+    def update(self):
+
+        try:
+
+            data = self.get(False).astype('float')
+
+            # dim 0 = x
+            # dim 1 = z
+            # Substract mean
+            data -= np.tile(np.mean(data,0),[data.shape[0],1])
+
+            # Do interpolation
+            data=np.dot(self.interp_matrix,np.transpose(data))
+            # Do fft along z, assume hermitian data in z (real in f)
+            data = np.absolute(np.fft.ihfft(data,None,0))
+
+            # Display in log scale
+            data=np.log(np.transpose(data)-np.min(data)+0.1)
+            #self.imv.setImage(np.fliplr(data[:,10:]))
+            self.imv.setImage(np.fliplr(data))
+
+
+        except Queue.Empty:
+            # Ignore and preserve previous state of display
+            pass

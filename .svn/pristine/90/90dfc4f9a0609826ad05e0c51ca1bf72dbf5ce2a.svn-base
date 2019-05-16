@@ -1,0 +1,394 @@
+/***************************************************************************
+*
+* RealTimeDisplay.cpp
+*
+* This program displays in real time two windows showing images taken
+* by one camera. The first window shows the raw image and the second
+* window shows a processed combination of images following this formula:
+* I = (I1-I2)^2 + (I3-I4)^2
+*
+* The display ends when the user presses any keyboard key
+*
+* @author Xavier Ducharme Rivard
+* @version 1.0 28/09/2015
+* 19/09/2015	created
+*
+***************************************************************************/
+
+/**************************************************************************
+*
+* OpenCV headers
+*
+*/
+
+/*
+**	For Access to command line display.
+*/
+#include	<fstream>
+#include	<iostream>
+#include	<iomanip>
+#include	<stdio.h>
+#include	<stdarg.h>
+#include	<string.h>
+/*
+**	Memory Allocation
+*/
+#include	<malloc.h>
+/*
+**	For checking for keypress
+*/
+//#include	<sys/time.h>
+#include	<sys/types.h>
+//#include	<unistd.h>
+/*
+/*
+**	OpenCV access.
+*/
+#include "opencv2/core/core.hpp"
+#include "opencv2/imgproc/imgproc_c.h"
+#include "opencv2/highgui/highgui.hpp"
+#include "opencv2/imgproc/imgproc.hpp"
+
+/*
+*
+* End of OpenCV headers
+*
+************************************************************************/
+
+#include "stdafx.h"
+#include "CiCLSimple.h"
+#include "clallserial.h"
+#include "BiApi.h"
+#include "CiApi.h"
+#include "BFErApi.h"
+#include "BFIO.h"
+#include "BFIOApi.h"
+#include "dsapi.h"	// Display Functions
+#include <conio.h>
+#include "SequenceInterface.h"
+#include "BiSimplePlusPlus.h"
+
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
+
+using namespace std;
+using namespace cv;
+
+// Each time this function is called, it sets
+// an exposure time from an internal array of times.
+
+// This function does the necessary image manipulations
+// before the display
+Mat imageManip(Mat images[4]);
+unsigned int changeFileName(char FileName[], char* argv[]);
+void mousePress(int event, int x, int y, int flags, void* userdata);
+
+int minVal, maxVal, medVal, xClick, yClick;
+
+
+int _tmain(int argc, char* argv[], TCHAR* envp[])
+{
+		hSerRef serialRefPtr;
+		CiENTRY entry;
+		Bd hBoard;
+		//	 hBoard2;
+		//BFU32 Type, BrdNum, Init, PortNum;
+		BFU32 PortNum = 0, PortNum2 = 1;
+		CLINT32 rv;
+		CLINT8 errorText[256];
+		CLUINT32 errorTextSize;
+		BFU32 xsize,ysize,pixdepth;
+		BFU32 bitmapsize,bitmapwidth;
+		MSG	Msg;
+		BFU32 NumPorts, numBuffers = 1;
+		BFU32 CLRV;
+		BFU32 FrameCount = 0;
+		PBFU32 HostBuf;
+		int seq = 1;
+		char FileName[60] = "Essai0000.tiff";
+		int numChar = 5;
+
+		/*// prompt the user for which CL board open
+		if (DoBrdOpenDialog(BOD_HIDEJUSTOPEN|BOD_CLONLY, FF_BITFLOW_MODERN, &Type, &BrdNum, &Init, &PortNum) )
+		{
+			return -1;
+		}*/
+
+		//////////////////////////////////////////////////////////////////////////////////////////
+		//																						//
+		/* ***************************** BOARD INITIALIZATION ********************************* */
+		//																						//
+		//////////////////////////////////////////////////////////////////////////////////////////
+
+		// Find the board by number, ignoring the type of board
+		if( CiSysBrdFind(CISYS_TYPE_ANY, 0, &entry ))
+		{
+			cout <<"Could not find board." << endl;
+			return -1;
+		}
+
+		// open the board for acquisition
+		if (CiBrdOpen(&entry, &hBoard, CiSysInitialize))
+		{
+			BFErrorShow(hBoard);
+			cout << "Could not open board." << endl;
+			return -1;
+		}
+
+		BFCHAR ModelSt[256], FamilySt[256];
+		BFU32 FamilyIndex, CiFamily;
+		BFGetBoardStrings(hBoard, ModelSt, MAX_STRING, FamilySt, MAX_STRING, &FamilyIndex, &CiFamily);
+
+		cout << "Board " << FamilySt << ModelSt << " has been opened.\n" << endl;
+
+		// Get info about port
+		CLINT8 manufacturerName[128];
+		CLINT8 portID[128];
+		CLUINT32 nameBytes=sizeof(manufacturerName);
+		CLUINT32 IDBytes=sizeof(portID);
+		CLUINT32 version;
+		if(clGetPortInfo(PortNum, manufacturerName, &nameBytes, portID, &IDBytes, &version))
+		{
+			cout << "Error getting port info." << endl;
+			CiBrdClose(hBoard);
+			return -1;
+		}
+
+		// get total number of serial ports in system
+		CLRV = clGetNumPorts(&NumPorts);
+		printf("System contains %d serial ports\n", NumPorts);
+
+
+		// Initilize the serial device for the opened board
+		rv = clSerialInit(PortNum, &serialRefPtr);
+		if(rv != CL_ERR_NO_ERR)
+		{
+			clGetErrorText(manufacturerName, rv, errorText, &errorTextSize);
+			cout << errorText << endl;
+			CiBrdClose(hBoard);
+			return -1;
+		}
+
+		// Get camera info
+		CiBrdInquire(hBoard, CiCamInqXSize, &xsize);
+		CiBrdInquire(hBoard, CiCamInqYSize0, &ysize);
+		CiBrdInquire(hBoard, CiCamInqDisplayFrameWidth, &bitmapwidth);
+		CiBrdInquire(hBoard, CiCamInqDisplayFrameSize0, &bitmapsize);
+		CiBrdInquire(hBoard, CiCamInqPixBitDepth, &pixdepth); // Changed bitDepth parameter, was CiCamInqPixBitDepthDisplay
+
+		// Allocate host memory to hold the image
+		 HostBuf = (PBFU32)malloc(bitmapsize);
+
+		// Did we get the memory?
+		if (HostBuf == BFNULL){
+			cout << "Host memory buffer could not be allocated - exit.\n";
+			CiBrdClose(hBoard);
+			return -1;
+		}
+		memset(HostBuf, 0, bitmapsize);
+
+		// Set up board for acquisistion
+		if (CiAqSetup(hBoard, (PBFVOID) HostBuf, bitmapsize, 0, CiDMADataMem,
+				CiLutBypass, CiLut8Bit, CiQTabBank0, TRUE, CiQTabModeOneBank,
+				AqEngJ))
+		{
+			BFErrorShow(hBoard);
+			cout << "CiAqSetup Failed." << endl;
+			clSerialClose(serialRefPtr);
+			CiBrdClose(hBoard);
+			return -1;
+		}
+
+
+		//////////////////////////////////////////////////////////////////////////////////////////
+		//																						//
+		/* ************************* OpenCV IMAGE INITIALIZATION ****************************** */
+		//																						//
+		//////////////////////////////////////////////////////////////////////////////////////////
+
+		// Mat for camera 1
+		Mat cam1Img(Size(xsize, ysize),CV_8UC1, (void *)HostBuf, (size_t)bitmapwidth);
+		string window1 = "Camera Acquisition";
+		namedWindow(window1, CV_WINDOW_NORMAL);
+		moveWindow(window1, 0, 0);
+		resizeWindow(window1, 400, 400);
+
+		// Mat for orthogonal image
+		Mat orthoImg;
+		string orthoWindow = "Polarization Image";
+		namedWindow(orthoWindow, CV_WINDOW_NORMAL);
+		moveWindow(orthoWindow, 0, 435);
+		resizeWindow(orthoWindow, 400, 400);
+		setMouseCallback(orthoWindow, mousePress, &orthoImg);
+
+		// Buffer images for calculations
+		Mat orthoImgs[4];
+		int counter = 0;
+
+		cout << "Hit any key to end acquisition." << endl;
+		// loop until the user presses a key, there is and error or the display
+		// surface is closed.
+		bool keeplooping = TRUE;
+		while(!BFkbhit())
+		{
+			// Acquire one image from the camera
+			if(CiAqCommand(hBoard, CiConSnap, CiConWait, CiQTabBank0, AqEngJ))
+			{
+				BFErrorShow(hBoard);
+				cout << "Snap command failed." << endl;
+				keeplooping = FALSE;
+			}
+			else
+			{
+                FrameCount++; // count good frames
+
+				counter = FrameCount%4;
+				switch(counter){
+				case 0:
+					orthoImgs[0] = cam1Img.clone();
+					break;
+				case 1:
+					orthoImgs[1] = cam1Img.clone();
+					break;
+				case 2:
+					orthoImgs[2] = cam1Img.clone();
+					break;
+				case 3:
+					orthoImgs[3] = cam1Img.clone();
+					break;
+				default:
+					break;
+				}
+				// Display images every 4 frames acquired
+				if(FrameCount%4 == 0) {
+					// Matrix operations
+					orthoImg = imageManip(orthoImgs);
+
+					// Adding median, minimum and maximum values on the summed image
+					Mat orthoImgColor;
+					cvtColor(orthoImg, orthoImgColor, CV_GRAY2RGB);
+					putText(orthoImgColor, "Median: " + to_string(medVal), cvPoint(30,50),
+					FONT_HERSHEY_COMPLEX_SMALL, 2, cvScalar(28, 28, 209), 2, CV_AA, false);
+					putText(orthoImgColor, "Min: " + to_string(minVal), cvPoint(350,50),
+					FONT_HERSHEY_COMPLEX_SMALL, 2, cvScalar(28, 28, 209), 2, CV_AA, false);
+					putText(orthoImgColor, "Min: " + to_string(maxVal), cvPoint(600,50),
+					FONT_HERSHEY_COMPLEX_SMALL, 2, cvScalar(28, 28, 209), 2, CV_AA, false);
+					rectangle(orthoImgColor, Point(xClick-50, yClick-50), Point(xClick+50, yClick+50),
+						cvScalar(28, 28, 209));
+
+					// Display with OpenCV
+					imshow(window1, cam1Img);
+					waitKey(1);
+					imshow(orthoWindow, orthoImgColor);
+					waitKey(1);
+				}
+			}
+			//needed for updating display window
+			if(PeekMessage(&Msg, BFNULL, 0, 0, PM_REMOVE))
+				DispatchMessage(&Msg);
+		}
+
+		// absorb key stroke
+		if(BFkbhit())
+			BFgetch();
+
+		CiAqCleanUp(hBoard, AqEngJ);
+
+		memset(HostBuf, 0, bitmapsize);
+		free(HostBuf);
+		// Close and clean up serial device
+		clSerialClose(serialRefPtr);
+
+		// close system
+		CiBrdClose(hBoard);
+
+	return 0;
+}
+
+
+/*
+* This function takes the array of 4 snaps taken at equally
+* distanced time intervals on a sine wave. In returns one single
+* image following the formula: endImg = (I1-I2)^2+(I3-I4)^2 where
+* I1, I2, I3, I4 are taken sequentially.
+*/
+Mat imageManip(Mat images[4]){
+	cv::Mat temp1, temp2, endImg;
+	cv::absdiff(images[0], images[1], temp1);
+	cv::absdiff(images[2], images[3], temp2);
+	temp1 = temp1.mul(temp1);
+	temp2 = temp2.mul(temp2);
+	cv::add(temp1, temp2, endImg);
+
+	return endImg;
+}
+
+
+/*
+* This function takes a filename (extension must be included)
+* and returns the same filename with and added "0000" for saving
+* purposes. For example, foo.jpg would be return as foo0000.jpg,
+* making it possible to increment for image acquisition
+*/
+unsigned int changeFileName(char FileName[], char* argv[]){
+	unsigned int fileNameLength=0;
+	unsigned int i=0;
+
+	while(argv[1][i] != '.'){
+		FileName[i] = argv[1][i];
+		i++;
+	}
+	if(argv[1][i] == '.'){
+		fileNameLength = i;
+		unsigned int y = i;
+		for(y = i; y < i+4; y++){
+			FileName[y] = '0';
+		}
+		for(i; i<(unsigned)strlen(argv[1]); i++){
+			FileName[y] = argv[1][i];
+			y++;
+		}
+	}
+	return fileNameLength;
+
+	//// Update of the filename
+	//int picnum = FrameCount/4;
+	//if( picnum < 10){
+	//	FileName[numChar+3] = (char) (picnum+48);
+	//}
+	//else if(picnum >=10&& picnum <100){
+	//	FileName[numChar+2] = (char) ((picnum/10)+48);
+	//	FileName[numChar+3] = (char) ((picnum%10)+48);
+	//}
+	//if(picnum >= 100 && picnum<1000){
+	//	FileName[numChar+3] = (char) ((picnum%10)+48);
+	//	FileName[numChar+2] = (char) (((picnum/10)%10)+48);
+	//	FileName[numChar+1] = (char) ((picnum/100)+48);
+	//}
+}
+
+
+/* This is the callback function for the summed image window. When
+ * the mouse is pressed, a 100x100 pixels square around the mouse
+ * takes the median, minimum and maximum and return it to global variables
+*/
+// TODO: Find a way not to use global variables to return values to main
+void mousePress(int event, int x, int y, int flags, void* img){
+	if( event == EVENT_LBUTTONUP){
+		cv::Mat* img2 = (cv::Mat*) img;
+		cv::Mat imgROI = (*img2)(cv::Rect(x-50, y-50, 100, 100));
+		cv::Scalar moy;
+		double min, max;
+		moy = cv::mean(imgROI);
+		cv::minMaxIdx(imgROI, &min, &max);
+		medVal = (int) moy[0];
+		minVal = min; maxVal = max;
+		/*cout<< setw(10) << "Moyenne: " << setprecision(4) << moy[0]
+					<< setw(10) << "		Min: " << setprecision(4) << min
+					<< setw(10) << "		Max: " << setprecision(4) << max << endl;*/
+	}
+	if ( event == EVENT_MOUSEMOVE){
+			xClick = x; yClick = y;
+	}
+}

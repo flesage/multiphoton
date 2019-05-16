@@ -12,6 +12,7 @@ import Queue
 from PyDAQmx import Task
 from PyDAQmx.DAQmxTypes import *
 from PyDAQmx.DAQmxConstants import *
+#from envs.tpm.Lib.telnetlib import AO
 
 """
 Continuous analog input task. Instantiate with number of channels, then config
@@ -106,6 +107,8 @@ class OnDemandVoltageOutTask(Task):
         Task.__init__(self)
 
         self.device = device
+        self.ao = ao
+        self.name = name
         # First create ao task to send discrete on demand values
         self.CreateAOVoltageChan(posixpath.join(device,ao),name,-10.0,10.0,DAQmx_Val_Volts,None)
         self.StartTask()
@@ -113,6 +116,8 @@ class OnDemandVoltageOutTask(Task):
 
     def write(self,value):
         self.WriteAnalogScalarF64(1,10.0,value,None)
+        
+
 
 
 class OnDemandDigitalOutTask(Task):

@@ -1,0 +1,726 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Aug 31 10:48:31 2015
+
+@author: flesage
+"""
+import threading
+import os
+import time
+import math
+from main import config
+from PyQt4 import QtGui
+from PyQt4.QtGui import QWidget
+from ui_galvos_form import Ui_GalvosForm
+from base import liomio
+from base.liomio import NiiStackSaver
+from main.config import slicethickness
+import numpy as np
+import nibabel as nb
+
+class GalvosController(QWidget, Ui_GalvosForm):
+    def __init__(self):
+        QWidget.__init__(self)
+
+        # Set up the user interface from Designer.
+        self.setupUi(self)
+        
+        # Change in any data
+        validator=QtGui.QIntValidator(1,3000,self)
+        self.lineEdit_nx.setValidator(validator)
+        self.lineEdit_ny.setValidator(validator)
+        self.saving = None
+        self.Mozaic = None
+        self.lineEdit_width.setValidator(validator)
+        self.lineEdit_height.setValidator(validator)
+        validator2=QtGui.QIntValidator(1,200,self)
+        self.lineEdit_extrapoints.setValidator(validator2)
+        validator3=QtGui.QIntValidator(1,32,self)
+        self.lineEdit_fastaxisrepeat.setValidator(validator3)
+        self.lineEdit_linerate.setValidator(validator)
+        validator4=QtGui.QIntValidator(0,100,self)
+        self.lineEdit_laser_power1.setValidator(validator4)
+        self.lineEdit_laser_power1.editingFinished.connect(self.set_power1)
+        self.lineEdit_laser_power2.setValidator(validator4)
+        self.lineEdit_laser_power2.editingFinished.connect(self.set_power2)
+        
+        self.ending=False
+        self.firstcut=True
+        self.maxapt= False
+        self.firstcutaccepted=False
+        self.slice=0
+        self.slicethickness = slicethickness # go see in config
+        self.microstepsize=0.49609375
+        self.numberofslice = 0
+        
+        '''
+        self.aplane=0
+        self.bplane=0
+        self.cplane=0
+        self.correctinplaneindex = 0
+        '''
+
+        
+        self.comboBox_scantype.activated.connect(self.scantype_chosen)
+        
+        # Start and stop scans
+        self.pushButton_start.clicked.connect(self.startscan)
+        self.pushButton_stop.clicked.connect(self.stopscan)   
+        self.pushButton_APT_Motor.clicked.connect(self.MoveAPTMotor)
+        self.pushButton_center.clicked.connect(self.move_center)
+        self.pushButton_down.clicked.connect(self.move_down)
+        self.pushButton_right.clicked.connect(self.move_right)
+        self.pushButton_up.clicked.connect(self.move_up)
+        self.pushButton_left.clicked.connect(self.move_left)
+        self.pushButton_saving.clicked.connect(self.decidingtosave)
+        self.pushButton_settop.clicked.connect(self.set_top)
+        self.pushButton_getPosthorlabs.clicked.connect(self.getposfocusthorlabs)
+        self.pushButton_motor_up.clicked.connect(self.move_motor_up)
+        self.pushButton_mozaic.clicked.connect(self.start_mozaic)
+        self.pushButton_motor_down.clicked.connect(self.move_motor_down)
+        self.pushButton_ZaberX_left.clicked.connect(self.move_ZaberX_left)
+        self.pushButton_ZaberX_right.clicked.connect(self.move_ZaberX_right)
+        self.pushButton_ZaberY_left.clicked.connect(self.move_ZaberY_left)
+        self.pushButton_ZaberY_right.clicked.connect(self.move_ZaberY_right) 
+        self.pushButton_init.clicked.connect(self.initialisation)
+        self.pushButton_firstcut.clicked.connect(self.vibratomeprotocolfirscut)
+        self.pushButton_Settopleft.clicked.connect(self.set_topleft) 
+        self.pushButton_Setbottomright.clicked.connect(self.set_bottomright)  
+        self.pushButton_shutter.clicked.connect(self.swapshutter)
+        self.shutter_closed = True                      
+        self.galvos=None
+        self.center_x=0.0
+        self.center_y=0.0
+        self.stopped = True
+        self.t1 = None
+        self.topleft= None
+        self.bottomright= None
+        self.power_motor = None
+
+    def setShutter(self,shutter):
+        self.shutter = shutter   
+    
+    def swapshutter(self):
+        if self.shutter_closed:
+            self.shutter.on()
+            self.shutter_closed = False
+        else:
+            self.shutter.off() 
+            self.shutter_closed = True
+         
+    def setGalvos(self,galvos):
+        self.galvos=galvos
+        
+    def setMotors(self,motors):
+        self.motors=motors
+        
+    def setZaber(self,zaber):
+        self.zaber=zaber
+        
+    def settesteur(self,testeur):
+        self.test = testeur
+        
+    def setVibratome(self,vibratome):
+        self.vibratome = vibratome
+        
+    def setThorlabs(self,thorlabs):
+        self.thorlabs=thorlabs        
+        
+    def setMeas(self,meas):
+        self.meas=meas
+        
+    def setPowerMotor(self,power_motor):
+        self.power_motor = power_motor
+        
+        # Assuming Home is zero intensity
+        #self.power_motor.goHome()
+        
+    
+        
+    def set_power1(self): 
+        percent = float(self.lineEdit_laser_power1.text())
+        #calib = 7*math.pi/45
+        calib = 23*math.pi/45
+        deg=float((45/math.pi)*(math.asin(2*percent/100-1)+math.pi/2+calib))
+        print deg
+        self.power_motor.goTo_abs(1, deg)
+        
+    def set_power1_manually(self,percent): 
+        perc = float(percent)
+        #calib = 7*math.pi/45
+        calib = 23*math.pi/45
+        deg=float((45/math.pi)*(math.asin(2*perc/100-1)+math.pi/2+calib))
+        print deg
+        self.power_motor.goTo_abs(1, deg)
+                
+    def set_power2(self): 
+        percent = float(self.lineEdit_laser_power2.text())
+        #calib = 7*math.pi/45
+        calib = 40*math.pi/45
+        deg=float((45/math.pi)*(math.asin(2*percent/100-1)+math.pi/2+calib))
+        print deg
+        self.power_motor.goTo_abs(2, deg)
+        
+    def set_power2_manually(self,percent): 
+        perc = float(percent)
+        #calib = 7*math.pi/45
+        calib = 40*math.pi/45
+        deg=float((45/math.pi)*(math.asin(2*perc/100-1)+math.pi/2+calib))
+        print deg
+        self.power_motor.goTo_abs(2, deg)
+                        
+    def startscan(self):
+        
+        if self.Mozaic == True and self.saving == False:
+
+            nx=400    
+            ny=400
+            n_extra= 100
+            
+        else:
+            nx=int(self.lineEdit_nx.text())    
+            ny=int(self.lineEdit_ny.text())   
+            n_extra=float(self.lineEdit_extrapoints.text())      
+               
+        width=float(self.lineEdit_width.text())          
+        height=float(self.lineEdit_height.text())         
+        n_repeat=int(self.lineEdit_fastaxisrepeat.text())
+        line_rate=float(self.lineEdit_linerate.text())
+        
+        
+
+        # Set ramp
+        if self.comboBox_scantype.currentText() == 'SawTooth':
+            self.galvos.setSawToothRamp(self.center_x-width/2,self.center_y-height/2,self.center_x+width/2,self.center_y+height/2,nx,ny,n_extra,n_repeat,line_rate)
+        elif self.comboBox_scantype.currentText() == 'Triangular':
+            self.galvos.setTriangularRamp(self.center_x-width/2,self.center_y-height/2,self.center_x+width/2,self.center_y+height/2,nx,ny,n_extra,n_repeat,line_rate)
+        elif self.comboBox_scantype.currentText() == 'Line':          
+            self.galvos.setLineRamp(self.center_x-width/2,self.center_y-height/2,self.center_x+width/2,self.center_y+height/2,nx,ny,n_extra,line_rate)
+        # Start generating
+        self.stopped = False
+        self.galvos.startTask()
+        
+
+
+
+    def set_top(self):
+        
+        self.top=float(self.motors.get_pos())
+        self.startingtop=float(self.motors.get_pos())
+        print(self.top)
+    
+    def stack_thread(self):
+        # Start taking the stack
+        # Step one: Move motor to top position 
+        self.galvos.setFinite(True)
+
+        self.move_motor_top(self.top)
+          
+        time.sleep(1)
+        # Step two: Start stack loop
+        self.zstep=float(self.lineEdit_zstep.text())
+        n_steps = int(self.lineEdit_nstack.text())
+        
+        for k in range(n_steps):
+            # Take 2D image and saving
+            print k
+            self.startscan()
+            # Move z motors
+            #self.motors.move_dx(1)
+            self.motors.move_dx(-self.zstep/1000)
+            time.sleep(0.1)
+            if self.stopped:
+                break
+                        
+        self.galvos.setFinite(False)
+    
+    def stack_thread_precheck(self):
+        # Start taking the stack
+        # Step one: Move motor to top position 
+        self.galvos.setFinite(True)
+
+        self.move_motor_top(self.top + 0.2)
+          
+        time.sleep(1)
+        # Step two: Start stack loop
+        self.zstep=float(self.lineEdit_zstep.text())
+        n_steps = 10
+        
+        for k in range(n_steps):
+            # Take 2D image and saving
+            print k
+            self.startscan()
+            # Move z motors
+            #self.motors.move_dx(1)
+            self.motors.move_dx(-self.zstep/1000)
+            time.sleep(0.1)
+            if self.stopped:
+                break
+                        
+        self.galvos.setFinite(False)
+        
+    def start_mozaic(self):
+        
+        self.Mozaic = True
+        
+        self.ending = False #only 1 pic
+        
+        self.zstep=float(self.lineEdit_zstep.text())
+        self.width=float(self.lineEdit_width.text())       
+        self.height=float(self.lineEdit_height.text()) 
+        self.mwidth=(self.bottomright[0]-self.topleft[0])*self.microstepsize/1000
+        self.mheight=(self.bottomright[1]-self.topleft[1])*self.microstepsize/1000
+        self.xstep=0.8*self.width /1000  #in microns in interface : result in mm
+        self.ystep=0.8*self.height /1000  #in microns in interface : result in mm
+        self.nstepx=int(math.ceil(self.mwidth/self.xstep))
+        self.nstepy=int(math.ceil(self.mheight/self.ystep))
+        self.affine = np.eye(4)
+        self.posdepartrotation =float((45/math.pi)*(math.asin(2*float(self.lineEdit_laser_power1.text())/100-1)+math.pi/2+23*math.pi/45))
+        print 'Position de depart', self.posdepartrotation
+        self.percentdepart= float(self.lineEdit_laser_power1.text())
+        print 'Pourcentage de depart', self.percentdepart , '%'
+        
+        print ('nstep y :',int(math.ceil(self.nstepy)))
+        print ('nstep x :',int(math.ceil(self.nstepx)))
+        
+        self.imageprecheck = np.zeros((self.nstepx,self.nstepy,2))
+        self.current_slice=0
+        
+        nx=int(self.lineEdit_nx.text())    
+        ny=int(self.lineEdit_ny.text())          
+        n_extra=float(self.lineEdit_extrapoints.text())
+        n_steps = int(self.lineEdit_nstack.text())
+        
+        self.current_vol_in_slice=0
+        self.nvolperslice=((math.ceil(self.nstepx))*(math.ceil(self.nstepy)))
+        
+        n=0
+        q=0
+        
+        while self.ending is False:
+        
+
+                # Compute scan positions (e.g. 3x3mm avec obj qui voit width et height)
+                # Calcule positions avec 20% overlap xstep = 0.8*width, ystep = 0.8*height
+                #Premiere acquisition rapide 
+                
+            #-----------------------------------MASK---------------------------------
+            if q==0:
+                self.saving = False  
+
+                self.power_motor.goTo_abs(1,float((45./math.pi)*(math.asin(2.*(40.)/100.-1.)+math.pi/2.+23.*math.pi/45.)))
+                print 'power_1 = 40'
+                time.sleep(2)
+                
+                self.thorlabs.mAbs(self.posfocusthorlabs + (self.slicethickness * self.slice))
+                for i in range(int(math.ceil(self.nstepy))):
+                    print ('i is:',i)
+                    self.zaber.move_y((self.topleft[1]*self.microstepsize/1000)+(i*self.ystep))
+                
+                    for j in range(int(math.ceil(self.nstepx))):
+                        self.zaber.move_x((self.topleft[0]*self.microstepsize/1000)+(j*self.xstep))
+                        print ('j is:',j)
+                    
+                        nii_saver_1 = liomio.NiiStackSaver(config.filelocation,400,400,10,100,math.ceil(self.nstepx),math.ceil(self.nstepy),((math.ceil(self.nstepx))*(math.ceil(self.nstepy))),self.power_motor,self.motors,self.top,self.zstep,self.saving,self.imageprecheck,self.current_slice,i,j,self.posdepartrotation)
+                        self.meas.setDataConsumer(nii_saver_1,True,1)
+    
+                        self.stack_thread_precheck() 
+                    
+                        self.meas.removeDataConsumer(nii_saver_1)
+            
+        
+                time.sleep(1)
+                #A tester
+                print self.imageprecheck[:,:,0]
+                print self.imageprecheck[:,:,1]
+            
+                
+            if self.imageprecheck is not None:
+                #----------------------------------TRAITEMENT/corretion--------------------------------------
+                self.matrixofcalcul = np.array((-1,0,1))
+
+            
+                m=0
+                
+                
+                for i in range(int(math.ceil(self.nstepy))):
+                    for j in range(int(math.ceil(self.nstepx))):
+                        if self.imageprecheck[j,i,0] == 1 :
+                            #print 'j=',j,', i=',i
+                            self.mainnumber=self.imageprecheck[j,i,1]
+                            self.neighbors = np.ravel(np.zeros((1,10)))
+                            for k in range(3):
+                                for l in range(3):
+                                    if k!=1 or l!=1 :
+                                        
+                                        if j+self.matrixofcalcul[k] == -1 or i+self.matrixofcalcul[l] == -1:
+                                                
+                                                
+                                            if j+self.matrixofcalcul[k] == -1 :
+                                                pass
+                                                           
+                                            if i+self.matrixofcalcul[l] == -1 :
+                                                pass
+                                                    
+  
+                                        else:
+                                            try:
+                                                self.neighbors[m] = self.imageprecheck[j+self.matrixofcalcul[k],i+self.matrixofcalcul[l],1] #adresse mirroir
+                                                '''
+                                                print 'k=', k
+                                                print 'l=', l
+                                                print 'self.matrixofcalcul[k]=', self.matrixofcalcul[k]
+                                                print 'self.matrixofcalcul[l]=', self.matrixofcalcul[l]
+                                                print 'self.neighbors[m]=', self.neighbors[m]
+                                                print 'm=',m
+                                                print ''
+                                                '''
+                                            
+                                            except:
+                                                self.neighbors[m] = 0.
+                                                '''
+                                                print 'k=', k
+                                                print 'l=', l
+                                                print 'self.neighbors[m]=', self.neighbors[m]
+                                                print 'm=',m
+                                                print ''
+                                                '''
+                                        m=m+1        
+                                        
+                            #print self.neighbors
+                            self.neighbors_list = self.neighbors.tolist()
+                            self.remove_values_from_list(self.neighbors_list, 0.)
+                            self.neighbors = np.asarray(self.neighbors_list)
+                            #print 'cropping'
+                            #print self.neighbors
+
+                            if len(self.neighbors)<=6 and len(self.neighbors)>=2 :
+                            
+                                self.meanneighbors=np.mean(self.neighbors, axis=0)
+                            
+                                if self.meanneighbors!=self.mainnumber:
+                                
+                                    m = int(self.meanneighbors / (self.zstep/1000))
+                                    m = float(m*(self.zstep/1000))
+                                    self.mainnumber = m
+                                    #print 'Correction mainnumber'
+                                    #print self.mainnumber
+                                    self.imageprecheck[j,i,1] = self.mainnumber
+                            m=0
+             
+                #---------------création du plan------------------------
+                time.sleep(1)
+                #A tester
+                print self.imageprecheck[:,:,0]
+                print self.imageprecheck[:,:,1]
+                
+                
+                self.Zplan = self.test.planemodelling(self.imageprecheck)          
+                print self.Zplan
+                self.imageprecheck[:,:,1] = self.Zplan
+                #sauvegarder le imageprecheck pour les focus position
+                
+                np.save('C:\\Users\\LiomW17\\Desktop\\data\\filelocation\\focusposition_' + str(self.current_slice) ,self.imageprecheck)
+                
+                
+                #break  
+            #---------------------------Saved image-----------------------------------------------
+                         
+            self.saving = True           
+                
+            self.power_motor.goTo_abs(1, self.posdepartrotation)
+            
+            time.sleep(1)
+                
+            n=n+1
+            q=q+1
+            self.thorlabs.mAbs(self.posfocusthorlabs + (self.slicethickness * self.slice))
+            
+            for i in range(int(math.ceil(self.nstepy))):
+                print ('i is:',i)
+                self.zaber.move_y((self.topleft[1]*self.microstepsize/1000)+(i*self.ystep))
+                
+                for j in range(int(math.ceil(self.nstepx))):
+                    self.zaber.move_x((self.topleft[0]*self.microstepsize/1000)+(j*self.xstep))
+                    print ('j is:',j)
+                    
+                    self.power_motor.goTo_abs(1,self.posdepartrotation)
+                    
+                    
+                    nii_saver_2 = liomio.NiiStackSaver(config.filelocation,nx,ny,n_steps,n_extra,math.ceil(self.nstepx),math.ceil(self.nstepy),self.nvolperslice,self.power_motor,self.motors,self.top,self.zstep,self.saving,self.imageprecheck,self.current_slice,i,j,self.posdepartrotation)
+                    self.meas.setDataConsumer(nii_saver_2,True,1)
+                
+                    if self.imageprecheck[j,i,0] == 1 :
+                        self.top = self.imageprecheck[j,i,1]
+                        self.stack_thread()
+                        self.top = self.startingtop
+                        
+                    elif self.imageprecheck[j,i,0] == 2 :#intern clock problem
+            
+                        self.img = nb.Nifti1Image(np.zeros((ny,nx+n_extra,n_steps)),self.affine)
+                        self.filocation= os.path.join(config.filelocation, 'image_nx_'+ str(j) + '_ny_'+ str(i) + '_slice_'+ str(self.current_slice) + '.nii.gz')
+                        nb.save(self.img, self.filocation)
+                        
+                    self.meas.removeDataConsumer(nii_saver_2)
+                        
+                    self.current_vol_in_slice = self.current_vol_in_slice + 1    
+                    if self.current_vol_in_slice == self.nvolperslice:
+                        self.current_slice = self.current_slice +1 
+                        self.current_vol_in_slice = 0
+            
+                   
+            self.emptyimages = np.ravel(self.imageprecheck[:,:,0])
+            
+            c=0
+            
+            for i in range(len(self.emptyimages)):
+                if self.emptyimages[i] == 2.:
+                        c=c+1
+            if c == len(self.emptyimages):
+                self.ending = True
+                print 'No images detected at all, end of image taking'
+            
+            if q == config.numberofsameprecheck:
+                q=0
+                self.imageprecheck = np.zeros((self.nstepx,self.nstepy,2))
+            
+            if n==config.numberofslicedesired :
+
+                self.ending = True #only one picture
+                
+
+            self.vibratomeprotocol()
+
+        
+        self.set_power1_manually(0)
+        
+        
+    def stopscan(self):
+        self.stopped = True
+        if self.t1 is not None:
+            self.t1.join()
+            self.t1=None
+        self.galvos.stopTask()
+        
+    def scantype_chosen(self,text):
+        self.galvos.stopTask()
+        if text=='Sawtooth':
+            self.label_nx.setText('Nx')
+            self.label_ny.setText('Ny')
+        elif text=='Triangular':
+            self.label_nx.setText('Nx')
+            self.label_ny.setText('Ny')            
+        elif text=='Line':
+            self.label_nx.setText('N points')
+            self.label_ny.setText('N repeat')
+            
+    def move_up(self):
+        height=float(self.lineEdit_height.text())     
+        self.center_y=self.center_y-height/25
+        self.galvos.move(self.center_x,self.center_y)
+        
+    def move_down(self):
+        height=float(self.lineEdit_height.text())     
+        self.center_y=self.center_y+height/25
+        self.galvos.move(self.center_x,self.center_y)
+
+    def move_right(self):
+        width=float(self.lineEdit_width.text())          
+        self.center_x=self.center_x-width/25
+        self.galvos.move(self.center_x,self.center_y)
+
+    def move_left(self):
+        width=float(self.lineEdit_width.text())          
+        self.center_x=self.center_x+width/25
+        self.galvos.move(self.center_x,self.center_y)
+
+    def move_center(self):
+        self.center_x=0.0
+        self.center_y=0.0
+        self.galvos.move(self.center_x,self.center_y)
+
+        
+    def move_motor_up(self):
+        
+        dx_up=float(self.lineEdit_z_motor_step.text())
+        self.motors.move_dx(dx_up/1000)
+        
+    def move_motor_down(self):
+        dx_down=float(self.lineEdit_z_motor_step.text())
+        self.motors.move_dx(-dx_down/1000)
+        
+    def move_motor_top(self,top):
+        self.motors.move_ax(top)
+        
+    def move_ZaberX_left(self):
+        posX=[-float(self.lineEdit_Zaber_step.text())*10,0]
+        self.zaber.goTo(posX)
+
+    def move_ZaberX_right(self):
+        posX=[float(self.lineEdit_Zaber_step.text())*10,0]
+        self.zaber.goTo(posX)
+        
+    def move_ZaberY_left(self):
+        
+        posY=[0,-float(self.lineEdit_Zaber_step.text())*10]
+        self.zaber.goTo(posY)        
+        
+    def move_ZaberY_right(self):
+        posY=[0,float(self.lineEdit_Zaber_step.text())*10]
+        self.zaber.goTo(posY)
+    
+        
+    def initialisation(self):
+        self.thorlabs.goHome()
+        self.zaber.goHome()
+        self.motors.home()
+        time.sleep(3)
+        self.motors.move_ax(-12.0)
+        
+    def exitprogram(self):
+        self.thorlabs.cleanUpAPT()
+        self.sys.exit(0)
+        
+    def vibratomeprotocolfirscut(self):
+        self.firstcut = True
+        self.firstcutaccepted = False
+        self.vibratomeprotocol()
+        
+        
+    def vibratomeprotocol(self):
+        
+        self.motors.getouttheway()
+        self.thorlabsposition = self.thorlabs.getPos()
+        self.numberofslice = self.numberofslice+1
+        
+        if self.ending is False :
+            print 'doing a protocol'
+            self.zaber.move_y(config.posycoupe)
+            time.sleep(0.1)
+            self.zaber.move_x(config.posxcoupeinit)
+            time.sleep(0.1)
+            if self.numberofslice == config.numberofslicedesired  or self.thorlabsposition == config.maxthorlabsmotor:
+                print('Fin de sequence')
+                self.ending=True
+                
+            elif self.firstcut:
+                self.numberofslice = self.numberofslice-1
+                while self.firstcutaccepted is not True:
+                    self.firstcut= input('Enter starting position in absolute (mm): ')
+                    self.thorlabs.mAbs(self.firstcut)
+                    self.startingpoint=self.firstcut
+                    self.firstcutaccepted = input('Is the position okay? (False or True) : ')
+                
+                self.firstcut=False
+                self.vibratome.bladefrequency(2500) #3600 pour activer
+                #print 'start vibratome'
+                time.sleep(2)
+                
+            else:
+                self.thorlabs.mAbs(self.startingpoint + (self.slicethickness * (self.slice+1)))
+                self.vibratome.bladefrequency(2500) #3600 pour activer
+                print 'start vibratome'
+                self.slice= self.slice +1
+                time.sleep(1)
+            
+            if self.ending is False :
+                print(self.zaber.possx,config.maxzaberx)
+        
+                self.zaber.motorx.set_speed(500.0)  
+            
+                self.zaber.move_x(config.posxcoupefin)
+            
+                self.zaber.motorx.set_speed(config.speedmotorxy) 
+            
+                self.vibratome.bladefrequency(0)
+                print 'stop vibratome'
+                time.sleep(2)
+                self.thorlabs.mAbs(self.startingpoint + (self.slicethickness * (self.slice-1)))
+                self.zaber.move_x(config.posxcoupeinit)
+                self.move_motor_top(self.top)
+                time.sleep(2)
+        
+        
+        else :
+            print 'finished'
+    def MoveAPTMotor(self):
+        abs_pos = float(self.lineEdit_APT_Motors.text())
+        self.thorlabs.mAbs(abs_pos)
+        
+    
+    def set_topleft(self):
+        self.topleft=self.zaber.getPos()
+    
+    def set_bottomright(self):
+        self.bottomright=self.zaber.getPos()
+        
+    def getposfocusthorlabs(self):
+        self.posfocusthorlabs = float(self.lineEdit_APT_Motors.text())
+        print self.posfocusthorlabs
+        
+    def decidingtosave(self):
+        self.saving = True
+        print('self.saving = True')
+        
+    def remove_values_from_list(self,the_list, val):
+        while val in the_list:
+            the_list.remove(val)
+        
+    '''
+    def correctingplane(self): #correcting the deformations of the blade (plane) by adding a z value for the objective 
+    
+        self.correctinplaneindex = self.correctinplaneindex+1 #incrementation
+        
+        if self.correctinplaneindex == 5:
+            self.correctinplaneindex=1
+    
+        if self.correctinplaneindex == 1:
+               
+            print 'inital position'
+            initial position when I click once
+        
+            self.initpositionplane = self.zaber.getposs()
+            self.xinitplane = self.zaber.possx
+            self.yinitplane = self.zaber.possy
+            self.cplane = float( self.motors.get_pos() )
+            
+            print 'initial position found'
+            print 'move in x for next step'
+            
+        if self.correctinplaneindex == 2 : #calculate a
+            
+            print 'Coefficient a (x)'
+            self.positionplane = self.zaber.getposs()
+            self.xforplane = self.zaber.possx
+            self.ccplane = self.motors.get_pos()
+            
+            self.aplane = float( (self.ccplane - self.cplane)/(self.xforplane - self.xinitplane) )
+            
+            print 'Coeficient a found'
+            print 'self.aplane'
+            print 'move in y for next step'
+            
+            self.zaber.move_x(self.xinitplane)
+        
+        if self.correctinplaneindex == 3 :
+        
+            print 'Coefficient b (y)'
+            self.positionplane = self.zaber.getposs()
+            self.yforplane = self.zaber.possy
+            self.cccplane = self.motors.get_pos()
+            
+            self.bplane = float( (self.cccplane - self.cplane)/(self.yforplane - self.yinitplane) )
+            
+            print 'self.aplane'
+            
+            self.zaber.move_y(self.yinitplane)
+            
+        if self.correctinplaneindex == 4 :
+        
+            self.zcorrection = float(self.aplane*(x - ) + self.bplane*(y - ) + self.cplane)
+        
+            print'self.zcorrection calculated'
+        
+        
+        
+    '''

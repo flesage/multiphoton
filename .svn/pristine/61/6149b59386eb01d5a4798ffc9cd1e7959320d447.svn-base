@@ -1,0 +1,101 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sat Sep 12 11:09:26 2015
+
+@author: flesage
+"""
+
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Aug 31 12:15:12 2015
+
+@author: flesage
+
+    Main application for OCT imaging, this uses various components that can be reused
+    but here we specify the hardware.
+"""
+
+import sys
+import numpy as np
+from PyQt4 import QtGui
+import pyqtgraph as pg
+import config
+from base.Galvos import Galvos
+from base.Galvos import Converter
+from base.liomacq import AnalogInputTask
+from base.liomacq import OnDemandDigitalOutTask
+from base.Motors import Motorsclass
+from base.Motors import ZaberMotor
+from base.Motors import Vibratome
+from base.Motors import ThorlabsMotor
+from base.Motors import RotationMotor
+from gui.ImageDisplay import ChannelViewer
+from gui.GalvosController import GalvosController
+
+if __name__ == '__main__':
+    
+    app = QtGui.QApplication(sys.argv)
+
+    # Basic control, make sure initial state is off
+    shutter = OnDemandDigitalOutTask(config.shutter_device,config.shutter_line,'Shutter')
+    shutter.off()
+    shutter.on()
+    
+    # Define where the galvos take their signal from
+    galvos=Galvos(config.galvos_device,config.galvos_aox,config.galvos_aoy)
+    galvos.config()
+    
+    motors = Motorsclass(config.motorscomport, config.motorsbaud)
+    zaber = ZaberMotor(config.zabercomport)
+    zaber.setConfig(config.maxzaberx, config.maxzabery, config.maxzaberxpipe, config.minzaberypipe)#set limits of zabers
+    zaber.motorx.set_speed(config.speedmotorxy)
+    zaber.motory.set_speed(config.speedmotorxy)
+    vibratome= Vibratome(config.vibratome)
+    thorlabs = ThorlabsMotor(config.SNlabjack, config.defnumber)
+    thorlabs.setLimits(config.maxthorlabsmotor)#set limits of the labjack
+    power_motor = RotationMotor(config.laser_intensity_device)
+    
+    # Define scale of system (according to telescope and objective)
+    unit_converter = Converter()
+    # Define scale of system (according to telescope and objective)
+    # Thorlabs galvo mirrors provide 0.8 V per degree
+    radians_per_volt = 2*np.pi/(360*0.96)#0.8 initial
+    f1=54
+    f2=400
+    fobj=45
+    scale_um_per_volt=(2*fobj*f1/f2*radians_per_volt)*1000
+    unit_converter = Converter()
+    unit_converter.setScale(scale_um_per_volt,scale_um_per_volt)    
+    galvos.setUnitConverter(unit_converter)
+    
+    # Set acquisition task that will be triggered on the galvo, try to build it
+    # as a slave task
+    meas = AnalogInputTask(config.pmt_device,config.pmt,2)
+    galvos.setSynchronizedAITask(meas)
+    
+    # Set viewers, update at 10 Hz, can skip images if too slow
+    viewer = ChannelViewer('Channel 0')
+    viewer2 = ChannelViewer('Channel 1')
+    meas.setDataConsumer(viewer,False,0)
+    meas.setDataConsumer(viewer2,False,1)
+    timer = pg.QtCore.QTimer()
+    timer.timeout.connect(viewer.update)
+    timer.start(100)
+    timer2 = pg.QtCore.QTimer()
+    timer2.timeout.connect(viewer2.update)
+    timer2.start(100)
+    # Start the gui controlling the galvos
+    galvos_controller = GalvosController()
+    galvos_controller.setGalvos(galvos)
+    galvos_controller.setMotors(motors)
+    galvos_controller.setZaber(zaber)
+    galvos_controller.setVibratome(vibratome)
+    galvos_controller.setThorlabs(thorlabs)
+    galvos_controller.setPowerMotor(power_motor)
+    galvos_controller.setShutter(shutter)
+    galvos_controller.setMeas(meas)
+    galvos_controller.show()
+    # Start the gui controlling the acquisition (save, views, etc.)
+    app.exec_()  
+    timer.stop()
+    timer2.stop()

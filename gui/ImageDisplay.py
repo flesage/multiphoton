@@ -17,37 +17,85 @@ import scipy.io as sio
 
 class ChannelViewer(Queue.Queue):
 
-    def __init__(self,name):
+    def __init__(self, name):
+        
         Queue.Queue.__init__(self,2)
-        self.imv = pg.ImageView(None,name)
+        
+        self.imv = pg.ImageView(None, name)
         self.imv.setWindowTitle(name)
-        #self.region = pg.LineSegmentROI([128, 128], [328, -328], pen=(1,9))
-        
-        self.lines = [];
-        
-        x1=random.uniform(1, 512)
-        y1=random.uniform(1, 512)
-        angleLine=random.uniform(0,math.pi)
-        length=60;
-        x2=x1+math.cos(angleLine)*length;
-        y2=y1+math.sin(angleLine)*length;
-        
-        
-        #x1=0
-        #y1=0
-        #x2=200;
-        #y2=100;
-        
-        self.region = pg.LineROI([x1, y1], [x2, y2], width=1, pen=(1,9))
-        self.imv.addItem(self.region)
-        
-        self.linescan_not_displayed=1
-        self.imv.show()
-        
+        self.imi=self.imv.getImageItem()
+        self.Scene=self.imv.scene
+        self.lines = []
+        self.rect = [] 
+        self.points = []
+        self.rectFlag = []
+
+        self.generateRandomLine()
+        self.linescan_not_displayed=0
+        self.lineSelected=-1
+        self.rectSelected=-1
         #self.setTestImage()
         #self.generateAutoLines()
-        #self.displayLines()
         
+        # display and set on_click callback
+        self.displayLines()
+        self.imv.show()
+        self.Scene.sigMouseClicked.connect(self.onClick)
+        self.Scene.sigMouseClicked.connect(self.mouseMoved)
+        
+    def mouseMoved(self,pos):
+        print "Image position:", self.imi.mapSceneToView(pos)
+        
+    def onClick(self, event):
+        items=self.Scene.items(event.scenePos())
+        for i in items:
+            if isinstance(i, pg.LineROI):
+                self.lineSelected=i
+                if event.button()==2:
+                    self.removeSelectedLine()
+                elif event.button()==1:
+                    self.CurrentLineInfo=self.getMouseSelectedLinePosition()
+            if isinstance(i,pg.ROI):
+                self.rectSelected=i
+                if event.button()==2:
+                    self.removeSelectedRectangle()
+                elif event.button()==1:
+                    self.CurrentRectInfo=self.getMouseSelectedRectPosition()     
+            if isinstance(i,pg.CircleROI):
+                self.pointSelected=i
+                if event.button()==2:
+                    self.removeSelectedPoint()
+                    print('click!')
+                #elif event.button()==1:
+                    #self.CurrentPointInfo=self.getMouseSelectedPointPosition()                    
+                    
+    def createPoint(self,posX,posY):
+        self.points.append(pg.CircleROI([posX, posY], [1,1], pen=(4,9)))
+        
+    def displayPoints(self):
+        if len(self.points)>0:
+            for point in self.points:
+                self.imv.addItem(point)
+
+    def removeLastPoints(self,number):
+        numPoints=len(self.points)
+        pointsToDelete=np.linspace(numPoints-number,numPoints-1,number)
+        pointsToDelete=np.flip(pointsToDelete)
+        print pointsToDelete
+        for i in pointsToDelete:
+            print(i)
+            del self.points[int(i)]
+        self.displayPoints()
+
+    def createRectangle(self,nx,ny):
+        width=round(nx/20)
+        height=round(ny/20)
+        xOrigin=round(nx/2)-round(width/2)
+        yOrigin=round(ny/2)-round(height/2)
+        self.rect.append(pg.ROI([xOrigin,yOrigin], size=[width,height], angle=0.0, invertible=False, maxBounds=None, snapSize=1.0, scaleSnap=False, translateSnap=False, rotateSnap=False, parent=None, pen='y', movable=True, removable=False))
+        self.rect[-1].addScaleHandle(pos=[1,1],center=[0,0])
+        self.rectFlag.append(0)
+        #self.rect[-1].addRotateHandle(pos=[0,1],center=[0.5,0.5])
     def showWindow(self):
         self.imv.show()
             
@@ -56,15 +104,53 @@ class ChannelViewer(Queue.Queue):
             for line in self.lines:
                 self.imv.addItem(line)
                 
+    def displayRectangles(self):
+        if len(self.rect)>0:
+            for selRect in self.rect:
+                self.imv.addItem(selRect)        
+                
     def resetLines(self):
         if len(self.lines)>0:
             for line in self.lines:
                 self.imv.removeItem(line)
-            
+                
+    def resetRect(self):
+        if len(self.rect)>0:
+            for selRect in self.rect:
+                self.imv.removeItem(selRect)
+                
+    def resetPoint(self):
+        if len(self.points)>0:
+            for point in self.points:
+                self.imv.removeItem(point)
+                
+    def removeAllPoints(self):
+        if len(self.points)>0:
+            for point in self.points:
+                self.imv.removeItem(point)
+        self.points=[]
+
+                
+    def highlightLine(self,selectedLine):
+        if len(self.lines)>0:
+            for line in self.lines:
+                    if line==selectedLine:
+                        line.setPen('b')
+                    else:
+                        line.setPen('y')
+
+    def highlightRect(self,selectedRect):
+        if len(self.rect)>0:
+            for selRec in self.rect:
+                    if selRec==selectedRect:
+                        selRec.setPen('b')
+                    else:
+                        selRec.setPen('y')
+
     def addLines(self):
         self.resetLines()        
-        x1=random.uniform(1, 512)
-        y1=random.uniform(1, 512)
+        x1=random.uniform(1, 256)
+        y1=random.uniform(1, 256)
         angleLine=random.uniform(0,math.pi)
         length=60;
         x2=x1+math.cos(angleLine)*length;
@@ -72,14 +158,60 @@ class ChannelViewer(Queue.Queue):
         self.lines.append(pg.LineROI([x1, y1], [x2, y2], width=1, pen=(1,9)))
         self.displayLines()
         
-    def removeLastLine(self):
-        self.resetLines()
-        if (len(self.lines)>0):
-            del self.lines[-1]        
-            self.displayLines()
+    def removeSelectedRectangle(self):
+        self.resetRect()
+        counter=0
+        delRec=-1
+        if len(self.rect)>0:
+            for selRec in self.rect:
+                if selRec==self.rectSelected:
+                    delRec=counter
+                counter=counter+1
+                if delRec!=-1:
+                    del self.rect[delRec]                      
+            self.displayRectangles()
         else:
             print('not enough lines to delete')
 
+    def removeSelectedPoint(self):
+        self.resetPoint()
+        counter=0
+        delpoint=-1
+        if len(self.points)>0:
+            for point in self.points:
+                if point==self.pointSelected:
+                    delpoint=counter
+                    print('found delpoint')
+                    del self.points[delpoint]
+                counter=counter+1                    
+            self.displayPoints()
+        else:
+            print('not enough lines to delete')
+
+    def removeSelectedLine(self):
+        self.resetLines()
+        counter=0
+        selLine=-1
+        if len(self.lines)>0:
+            for line in self.lines:
+                    if line==self.lineSelected:
+                        selLine=counter
+                    counter=counter+1
+                    if selLine!=-1:
+                        del self.lines[selLine]        
+            self.displayLines()
+        else:
+            print('not enough lines to delete')
+            
+    def generateRandomLine(self):
+        x1=random.uniform(1, 256)
+        y1=random.uniform(1, 256)
+        angleLine=random.uniform(0,math.pi)
+        length=60;
+        x2=x1+math.cos(angleLine)*length;
+        y2=y1+math.sin(angleLine)*length;
+        self.lines.append(pg.LineROI([x1, y1], [x2, y2], width=1, pen=(1,9)))
+        
     def generateAutoLines(self, 
                           scales=1, 
                           diam=10.0, 
@@ -104,14 +236,15 @@ class ChannelViewer(Queue.Queue):
         
         for i in lines:
             
-            x1=i[0,0]
-            y1=i[0,1]
+            x1=i[1,0]
+            y1=i[1,1]
             
-            x2=i[1,0]
-            y2=i[1,1]
+            x2=i[0,0]
+            y2=i[0,1]
 
-            self.lines.append(pg.LineROI([x1, x2], [y1, y2], width=1, pen=(1,9)))
+            self.lines.append(pg.LineROI([x1, y1], [x2, 2*y1-y2], width=1, pen=(1,9)))
  
+  
     def getCurrentImage(self):
         return np.array(self.imv.image).astype('float')
         
@@ -133,13 +266,13 @@ class ChannelViewer(Queue.Queue):
         
     def toggleLinearSelection(self):
         if self.linescan_not_displayed:
-            self.imv.addItem(self.region)
+            self.displayLines()
             self.linescan_not_displayed=0
         else:
-            self.imv.removeItem(self.region)
+            self.resetLines()
             self.linescan_not_displayed=1
             
-    def getSelectedLinePosition(self,lineNumber):
+    def getSelectedLinePosition(self, lineNumber):
         x_e, y_e=self.lines[lineNumber].pos()
         length,width=self.lines[lineNumber].size()
         alpha_e=self.lines[lineNumber].angle()*math.pi/180     #angle in radiants of the line
@@ -149,7 +282,60 @@ class ChannelViewer(Queue.Queue):
         delta_y= length * math.sin(alpha_e)      
         x_1=x_0+delta_x
         y_1=y_0+delta_y
-        return x_0, y_0, x_1, y_1, length    
+        return x_0, y_0, x_1, y_1, length        
+ 
+#     def getMouseSelectedLinePosition(self, item):
+#         x_e, y_e=item.pos()
+#         length,width=item.size()
+#         alpha_e=item.angle()*math.pi/180     #angle in radiants of the line
+#         x_0=x_e-width/2*math.sin(alpha_e)           #coordinate transform to obtain origin of line
+#         y_0=y_e+width/2*math.cos(alpha_e)        
+#         delta_x= length * math.cos(alpha_e)
+#         delta_y= length * math.sin(alpha_e)      
+#         x_1=x_0+delta_x
+#         y_1=y_0+delta_y
+#         return x_0, y_0, x_1, y_1, length 
+
+    
+
+    def getMouseSelectedLinePosition(self):
+        if (self.lineSelected != -1):
+            item=self.lineSelected
+            x_e, y_e=item.pos()
+            self.highlightLine(item)            
+            length,width=item.size()
+            alpha_e=item.angle()*math.pi/180     #angle in radiants of the line
+            x_0=x_e-width/2*math.sin(alpha_e)           #coordinate transform to obtain origin of line
+            y_0=y_e+width/2*math.cos(alpha_e)        
+            delta_x= length * math.cos(alpha_e)
+            delta_y= length * math.sin(alpha_e)      
+            x_1=x_0+delta_x
+            y_1=y_0+delta_y
+        else:
+            print("no lines selected!")
+            x_0=0
+            y_0=0
+            x_1=0
+            y_1=0
+            length=0
+        return x_0, y_0, x_1, y_1, length 
+
+    def getMouseSelectedRectPosition(self):
+        if (self.rectSelected != -1):
+            item=self.rectSelected
+            x_Origin, y_Origin=item.pos()
+            self.highlightRect(item)            
+            width,height=item.size()
+        else:
+            print("no rect selected!")
+            x_Origin=0
+            y_Origin=0
+            height=0
+            width=0
+        return x_Origin, y_Origin, width, height
+
+    def removeMouseSelectedLine(self, item):
+        self.imv.removeItem(item)
             
     def getCurrentLinePosition(self):
         x_e, y_e=self.region.pos()                  #coordinates of the lower left corner edge
@@ -162,7 +348,8 @@ class ChannelViewer(Queue.Queue):
         x_1=x_0+delta_x
         y_1=y_0+delta_y
         return x_0, y_0, x_1, y_1, length
-
+    
+    
 class SpeckleViewer(Queue.Queue):
     def __init__(self,name, depth):
         Queue.Queue.__init__(self,2)
