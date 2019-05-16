@@ -17,6 +17,7 @@ from PyQt5.QtWidgets import QWidget, QFileDialog
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QVBoxLayout, QSizePolicy, QMessageBox, QPushButton
 from PyQt5.QtGui import QIcon
 from scipy import signal
+from base.Maitai import Maitai
 
 from base import liomio
 from base.liomacq import OnDemandVoltageOutTask
@@ -68,6 +69,16 @@ class GalvosController(QWidget):
         self.pushButton_shutter_2ph.setStyleSheet("background-color: pale gray");
         self.pushButton_shutter_3ph.setStyleSheet("background-color: pale gray");
 
+        self.maitaiFlag=0
+        self.checkBoxMaiTai.clicked.connect(self.toggle_maitai_control)
+        self.pushButton_maitai.setEnabled(False)
+        self.pushButton_maitaiShutter.setEnabled(False)
+        self.pushButton_maitai.setEnabled(False)
+        self.pushButton_maitaiReadPower.setEnabled(False)
+        self.pushButton_maitaiReadWavelength.setEnabled(False)
+        self.pushButton_maitaiSetWavelength.setEnabled(False)
+        self.pushButton_maitaiCheckStatus.setEnabled(False)
+        self.pushButton_maitaiML.setEnabled(False)
         
         # Laser Maitai control
         self.maitai_off = True
@@ -281,6 +292,7 @@ class GalvosController(QWidget):
     #PO2 functons:
     
     def defineROI_PO2(self):
+        self.viewer.resetRect()
         nx=float(self.lineEdit_nx.text())
         ny=float(self.lineEdit_ny.text())
         self.viewer.createRectangle(nx,ny)
@@ -318,6 +330,7 @@ class GalvosController(QWidget):
                 for j in y_pos:
                     self.viewer.createPoint(i,j)
             self.viewer.displayPoints()
+            self.viewer.resetRect()
 
     def modifyGrid_PO2(self):
         self.viewer.removeAllPoints()
@@ -326,6 +339,11 @@ class GalvosController(QWidget):
         self.lineEdit_numXpoints.setText(str(self.numberOfXPoints))
         self.lineEdit_numYpoints.setText(str(self.numberOfYPoints))
         self.generateGrid_PO2()
+        
+    def clearGrid_PO2(self):
+        self.viewer.removeAllPoints()
+        self.viewer.resetRect()
+       
         
     def start_po2_scan(self):
         # Fermer EOM manuel
@@ -344,15 +362,16 @@ class GalvosController(QWidget):
         # Loop over points and:
         for i in range(self.po2_x_positions.shape[0]):
             self.galvos.moveOnDemand(self.po2_x_positions[i], self.po2_y_positions[i])
-            eom_task.start()
-            #time.sleep(1)
+            #eom_task.start()
+            time.sleep(1)
             print(str(self.po2_x_positions[i])+';'+str(self.po2_y_positions[i]))
 
         #    Start acquisition task averaging doing a finite ao task reapeated n average times
         #    Show in a plot the Decay curve
-        eom_task.close()
+        #eom_task.close()
         self.galvos.ao_task.StopTask()
         self.galvos.ao_task.ClearTask()
+        self.viewer.removeAllPoints()
         # Remettre EOM Manuel
         self.power_ao_eom = OnDemandVoltageOutTask(config.eom_device, config.eom_ao, 'Power2Ph')
         
@@ -623,6 +642,39 @@ class GalvosController(QWidget):
         
     #LASERS FUNCTIONS:
 
+    def toggle_maitai_control(self):
+        if (self.maitaiFlag==0):
+            maitaiStatus=True
+            self.maitaiFlag=1
+            self.lineEdit_maitai_status.setText('Connecting to MaiTai...')
+            laser = Maitai(config.comPortLaser)    
+            replaser = laser.ReadStatus()
+            self.lineEdit_maitai_status.setText('Status laser:' + replaser)
+            self.setMaitai(laser)
+        else:
+            maitaiStatus=False
+            self.maitaiFlag=0    
+            self.lineEdit_maitai_status.setText('Closing connection to MaiTai...')
+            self.maitai.CloseLaser()
+            self.maitai.serial.close()
+            del self.maitai
+            self.lineEdit_maitai_status.setText('Closing connection to MaiTai... done!')
+
+            
+        self.pushButton_maitai.setEnabled(maitaiStatus)
+        self.pushButton_maitaiShutter.setEnabled(maitaiStatus)
+        self.pushButton_maitai.setEnabled(maitaiStatus)
+        self.pushButton_maitaiReadPower.setEnabled(maitaiStatus)
+        self.pushButton_maitaiReadWavelength.setEnabled(maitaiStatus)
+        self.pushButton_maitaiSetWavelength.setEnabled(maitaiStatus)
+        self.pushButton_maitaiCheckStatus.setEnabled(maitaiStatus)
+        self.pushButton_maitaiML.setEnabled(maitaiStatus)
+
+    def closeLaser(self):
+        if (self.maitaiFlag==1):
+            self.maitai.CloseLaser()
+            self.maitai.SHUTTERshut()
+            
     def setMaitai(self,maitai):
         self.maitai = maitai
         

@@ -41,7 +41,7 @@ class ChannelViewer(Queue.Queue):
         self.displayLines()
         self.imv.show()
         self.Scene.sigMouseClicked.connect(self.onClick)
-        self.Scene.sigMouseClicked.connect(self.mouseMoved)
+        #self.Scene.sigMouseClicked.connect(self.mouseMoved)
         
     def mouseMoved(self,pos):
         print "Image position:", self.imi.mapSceneToView(pos)
@@ -88,8 +88,8 @@ class ChannelViewer(Queue.Queue):
         self.displayPoints()
 
     def createRectangle(self,nx,ny):
-        width=round(nx/20)
-        height=round(ny/20)
+        width=round(nx/5)
+        height=round(ny/5)
         xOrigin=round(nx/2)-round(width/2)
         yOrigin=round(ny/2)-round(height/2)
         self.rect.append(pg.ROI([xOrigin,yOrigin], size=[width,height], angle=0.0, invertible=False, maxBounds=None, snapSize=1.0, scaleSnap=False, translateSnap=False, rotateSnap=False, parent=None, pen='y', movable=True, removable=False))
@@ -129,7 +129,6 @@ class ChannelViewer(Queue.Queue):
             for point in self.points:
                 self.imv.removeItem(point)
         self.points=[]
-
                 
     def highlightLine(self,selectedLine):
         if len(self.lines)>0:
