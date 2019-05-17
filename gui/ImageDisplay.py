@@ -14,10 +14,24 @@ import random
 from vasc_seg.ScanLines import ScanLines
 import scipy.io as sio
 
+class po2Viewer(Queue.Queue):
+
+    def __init__(self, name):
+        
+        Queue.Queue.__init__(self,2)
+        
+        self.po2plot = pg.plot(title=name)
+        self.po2plot.setWindowTitle(name)
+
+        self.po2plot.move(1200, 500)
+        self.po2plot.resize(650, 450)
+        self.po2plot.show()
+        #self.Scene.sigMouseClicked.connect(self.mouseMove   
+     
 
 class ChannelViewer(Queue.Queue):
 
-    def __init__(self, name):
+    def __init__(self, name,windowYPosition):
         
         Queue.Queue.__init__(self,2)
         
@@ -30,7 +44,7 @@ class ChannelViewer(Queue.Queue):
         self.points = []
         self.rectFlag = []
 
-        self.generateRandomLine()
+        #self.generateRandomLine()
         self.linescan_not_displayed=0
         self.lineSelected=-1
         self.rectSelected=-1
@@ -39,6 +53,8 @@ class ChannelViewer(Queue.Queue):
         
         # display and set on_click callback
         self.displayLines()
+        self.imv.move(1200, windowYPosition)
+        self.imv.resize(650, 450)
         self.imv.show()
         self.Scene.sigMouseClicked.connect(self.onClick)
         #self.Scene.sigMouseClicked.connect(self.mouseMoved)
@@ -115,9 +131,12 @@ class ChannelViewer(Queue.Queue):
                 self.imv.removeItem(line)
                 
     def resetRect(self):
+        counter=0
         if len(self.rect)>0:
             for selRect in self.rect:
                 self.imv.removeItem(selRect)
+                del self.rect[counter]
+                counter=counter+1
                 
     def resetPoint(self):
         if len(self.points)>0:
@@ -180,7 +199,6 @@ class ChannelViewer(Queue.Queue):
             for point in self.points:
                 if point==self.pointSelected:
                     delpoint=counter
-                    print('found delpoint')
                     del self.points[delpoint]
                 counter=counter+1                    
             self.displayPoints()

@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1004</width>
-    <height>910</height>
+    <height>896</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -377,6 +377,25 @@
                <widget class="QCheckBox" name="checkBoxMaiTai">
                 <property name="text">
                  <string>Control MaiTai</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="label_62">
+                <property name="minimumSize">
+                 <size>
+                  <width>50</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="maximumSize">
+                 <size>
+                  <width>50</width>
+                  <height>16777215</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>Pulsing:</string>
                 </property>
                </widget>
               </item>
@@ -1062,7 +1081,7 @@
              <widget class="QPushButton" name="pushButton_stop">
               <property name="maximumSize">
                <size>
-                <width>200</width>
+                <width>300</width>
                 <height>16777215</height>
                </size>
               </property>
@@ -1092,7 +1111,7 @@
              <widget class="QPushButton" name="pushButton_start">
               <property name="maximumSize">
                <size>
-                <width>200</width>
+                <width>300</width>
                 <height>16777215</height>
                </size>
               </property>
@@ -2725,7 +2744,7 @@
                  </widget>
                 </item>
                 <item row="1" column="0">
-                 <widget class="QPushButton" name="pushButton_GenerateGrid">
+                 <widget class="QPushButton" name="pushButton_RemovePoints">
                   <property name="maximumSize">
                    <size>
                     <width>1000</width>
@@ -2733,7 +2752,7 @@
                    </size>
                   </property>
                   <property name="text">
-                   <string>Generate Grid</string>
+                   <string>Remove points</string>
                   </property>
                  </widget>
                 </item>
@@ -2851,13 +2870,6 @@
          </layout>
         </widget>
        </widget>
-      </widget>
-     </item>
-     <item>
-      <widget class="Line" name="line_5">
-       <property name="orientation">
-        <enum>Qt::Horizontal</enum>
-       </property>
       </widget>
      </item>
      <item>

@@ -27,6 +27,8 @@ import icons_rc
 from base.liomio import DataSaver
 from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot
 import posixpath
+from gui.ImageDisplay import po2Viewer
+
 import ImageDisplay as imdisp
 from scipy.interpolate import interp1d
 import h5py
@@ -279,7 +281,7 @@ class GalvosController(QWidget):
         
         #PO2:
         self.pushButton_defineROI.clicked.connect(self.defineROI_PO2)
-        self.pushButton_GenerateGrid.clicked.connect(self.generateGrid_PO2)
+        self.pushButton_RemovePoints.clicked.connect(self.clearGrid_PO2)
         self.numberOfPoints=0
         self.horizontalScrollBar_xPoints.setValue(1)
         self.horizontalScrollBar_yPoints.setValue(1)
@@ -289,7 +291,11 @@ class GalvosController(QWidget):
         self.numberOfYPoints=4
         
         
+        
     #PO2 functons:
+    
+    def updateViewerConsumer(self,flag):
+        self.ai_task.updateConsumerFlag('viewer',flag)
     
     def defineROI_PO2(self):
         self.viewer.resetRect()
@@ -315,12 +321,8 @@ class GalvosController(QWidget):
             counter=0
             for i in range(x_pos.shape[0]):
                 for j in range(y_pos.shape[0]):
-                    
-                    
                     y_pos_grid[counter]=(y_pos[j]-self.ny/2)*self.height/self.ny
                     x_pos_grid[counter]=(x_pos[i]-self.nx/2)*self.width/self.nx
-                    print('coords:')
-                    print(str(y_pos_grid[counter])+';'+str(x_pos_grid[counter]))
                     counter=counter+1
             x_pos_grid.astype(int)
             y_pos_grid.astype(int)
@@ -343,12 +345,23 @@ class GalvosController(QWidget):
     def clearGrid_PO2(self):
         self.viewer.removeAllPoints()
         self.viewer.resetRect()
-       
         
     def start_po2_scan(self):
+
+        self.ai_task.updateConsumerFlag('viewer',False)        
+        self.setPower2ph(0)
+        self.horizontalScrollBar_power2ph.setValue(0)        
+        self.toggle_shutter2ph()
+        print('Start po2 acquisition:')
         # Fermer EOM manuel
-        self.power_ao_eom.ClearTask()
-        del(self.power_ao_eom)
+        try:
+            self.power_ao_eom.ClearTask()
+        except AttributeError:
+            print('eom already cleared!')
+        else:
+            del(self.power_ao_eom)
+
+            
         # Steps
         gate_on = float(self.lineEdit_po2_gate_on.text())
         gate_off = float(self.lineEdit_po2_gate_off.text())
@@ -361,20 +374,25 @@ class GalvosController(QWidget):
         self.galvos.configOnDemand()
         # Loop over points and:
         for i in range(self.po2_x_positions.shape[0]):
+            print('po2 measurements: ' + str(i+1) + ' out of ' + str(self.po2_x_positions.shape[0]))
             self.galvos.moveOnDemand(self.po2_x_positions[i], self.po2_y_positions[i])
-            #eom_task.start()
+            eom_task.start()
             time.sleep(1)
             print(str(self.po2_x_positions[i])+';'+str(self.po2_y_positions[i]))
 
         #    Start acquisition task averaging doing a finite ao task reapeated n average times
         #    Show in a plot the Decay curve
-        #eom_task.close()
+        self.toggle_shutter2ph()
+        eom_task.close()
         self.galvos.ao_task.StopTask()
         self.galvos.ao_task.ClearTask()
-        self.viewer.removeAllPoints()
+        #self.viewer.removeAllPoints()
         # Remettre EOM Manuel
         self.power_ao_eom = OnDemandVoltageOutTask(config.eom_device, config.eom_ao, 'Power2Ph')
-        
+        print('po2 acquisition done!')
+        self.ai_task.updateConsumerFlag('viewer',True)        
+
+
     #PREVIEW VALUES
     def changeDisplayValues(self):
         if self.previewFlag==0:
@@ -1169,8 +1187,8 @@ class GalvosController(QWidget):
             self.data_saver.addAttribute('y_mean_um',y_mean_um) 
             self.data_saver.addAttribute('depth',self.currentZPos)
             self.data_saver.setBlockSize(512)          
-            self.ai_task.setDataConsumer(self.data_saver,True,0)
-            self.ai_task.setDataConsumer(self.data_saver,True,1)
+            self.ai_task.setDataConsumer(self.data_saver,True,0,'save',True)
+            self.ai_task.setDataConsumer(self.data_saver,True,1,'save',True)
             self.data_saver.startSaving()
         self.updateLineAcqTimer()
         self.galvos.startTask()        
@@ -1193,7 +1211,8 @@ class GalvosController(QWidget):
         self.galvos_stopped = True     
         if self.checkBox_enable_save.isChecked():
             self.data_saver.stopSaving()
-            
+            self.ai_task.removeDataConsumer(self.data_saver)
+
         print('finished line: ' + str(self.currentLine+1) + ' out of ' + str(self.numberOfLines))
             
         if (self.numberOfLines==self.currentLine+1):
@@ -1301,8 +1320,8 @@ class GalvosController(QWidget):
                 self.data_saver.addAttribute('y_mean_um',y_mean_um) 
                 self.data_saver.addAttribute('depth',self.currentZPos)
                 self.data_saver.setBlockSize(512)          
-                self.ai_task.setDataConsumer(self.data_saver,True,0)
-                self.ai_task.setDataConsumer(self.data_saver,True,1)
+                self.ai_task.setDataConsumer(self.data_saver,True,0,'save',True)
+                self.ai_task.setDataConsumer(self.data_saver,True,1,'save',True)
                 self.data_saver.startSaving()
             self.galvos.startTask()
 
@@ -1316,12 +1335,15 @@ class GalvosController(QWidget):
         self.pushButton_get_line_position.setEnabled(True)
         if self.checkBox_enable_save.isChecked():
             self.data_saver.stopSaving()
+            self.ai_task.removeDataConsumer(self.data_saver)
+
         self.galvos.stopTask()    
         self.galvos_stopped = True
                         
         self.galvos.stopTask()    
         self.galvos_stopped = True
         self.pushButton_start.setEnabled(True)
+
         
     def startscan(self):
         #self.liveScanNumber=self.liveScanNumber+1;
@@ -1374,8 +1396,8 @@ class GalvosController(QWidget):
             self.data_saver.addAttribute('line_rate',line_rate)   
             self.data_saver.addAttribute('scantype',self.comboBox_scantype.currentText())  
             self.data_saver.setBlockSize(512)          
-            self.ai_task.setDataConsumer(self.data_saver,True,0)
-            self.ai_task.setDataConsumer(self.data_saver,True,1)
+            self.ai_task.setDataConsumer(self.data_saver,True,0,'save',True)
+            self.ai_task.setDataConsumer(self.data_saver,True,1,'save',True)
             self.data_saver.startSaving()
         print('scanning started')            
         self.galvos.startTask()
@@ -1389,6 +1411,7 @@ class GalvosController(QWidget):
         if self.checkBox_enable_save.isChecked():
             print('stop saving...')
             self.data_saver.stopSaving()
+            self.ai_task.removeDataConsumer(self.data_saver)
             #self.data_saver.setBlockSize(512)
             print('stop saving done!')
         self.galvos.stopTask()    
@@ -1534,8 +1557,8 @@ class GalvosController(QWidget):
             self.data_saver.addAttribute('scantype',self.comboBox_scantype.currentText())  
             self.data_saver.setBlockSize(512)
             print 'setting consumers'
-            self.ai_task.setDataConsumer(self.data_saver,True,0)
-            self.ai_task.setDataConsumer(self.data_saver,True,1)
+            self.ai_task.setDataConsumer(self.data_saver,True,0,'save',True)
+            self.ai_task.setDataConsumer(self.data_saver,True,1,'save',True)
             print 'starting saving'
             self.data_saver.startSaving()
         #        print 'making connection'
@@ -1560,6 +1583,7 @@ class GalvosController(QWidget):
         if self.checkBox_enable_save.isChecked():
             print('stop saving...')
             self.data_saver.stopSaving()
+            self.ai_task.removeDataConsumer(self.data_saver)
                 #self.data_saver.setBlockSize(512)
             print('stop saving done!')
             
@@ -1655,8 +1679,8 @@ class GalvosController(QWidget):
             self.data_saver.addAttribute('y_mean_um',y_mean_um) 
             self.data_saver.addAttribute('depth',self.currentZPos)
             self.data_saver.setBlockSize(512)          
-            self.ai_task.setDataConsumer(self.data_saver,True,0)
-            self.ai_task.setDataConsumer(self.data_saver,True,1)
+            self.ai_task.setDataConsumer(self.data_saver,True,0,'save',True)
+            self.ai_task.setDataConsumer(self.data_saver,True,1,'save',True)
             self.data_saver.startSaving()
         self.make_connection_multiple_lines(self.galvos.ao_task.signal_helper.aoDoneSignal)
         self.updateLineAcq()
@@ -1682,6 +1706,7 @@ class GalvosController(QWidget):
         print('in NEXTLINE')
         if self.checkBox_enable_save.isChecked():
             self.data_saver.stopSaving()
+            self.ai_task.removeDataConsumer(self.data_saver)
         time.sleep(2)
         self.currentIteration = self.currentIteration+1;        
         testAveraging = self.currentIteration % self.lineRepeat       
@@ -1763,8 +1788,8 @@ class GalvosController(QWidget):
                     self.data_saver.addAttribute('y_mean_um',y_mean_um) 
                     self.data_saver.addAttribute('depth',self.currentZPos)
                     self.data_saver.setBlockSize(512)          
-                    self.ai_task.setDataConsumer(self.data_saver,True,0)
-                    self.ai_task.setDataConsumer(self.data_saver,True,1)
+                    self.ai_task.setDataConsumer(self.data_saver,True,0,'save',True)
+                    self.ai_task.setDataConsumer(self.data_saver,True,1,'save',True)
                     self.data_saver.startSaving()
                     
             self.make_connection_multiple_lines(self.galvos.ao_task.signal_helper.aoDoneSignal)
@@ -1777,6 +1802,9 @@ class GalvosController(QWidget):
             self.pushButtonStartMultipleLineAcq.setEnabled(True)
             self.pushButtonStopMultipleLineAcq.setEnabled(False)
             self.toggle_shutter2ph()
+            if self.checkBox_enable_save.isChecked():
+                self.data_saver.stopSaving()
+                self.ai_task.removeDataConsumer(self.data_saver)
 
     #STACK
     
@@ -1848,8 +1876,8 @@ class GalvosController(QWidget):
             self.data_saver.addAttribute('zstep',self.zstep)              
             self.data_saver.setBlockSize(512)
             print 'setting consumers'
-            self.ai_task.setDataConsumer(self.data_saver,True,0)
-            self.ai_task.setDataConsumer(self.data_saver,True,1)
+            self.ai_task.setDataConsumer(self.data_saver,True,0,'save',True)
+            self.ai_task.setDataConsumer(self.data_saver,True,1,'save',True)
             print 'starting saving'
             self.get_current_z_depth()
             self.lineEdit_current_depth.setText(str(self.currentZPos))
@@ -1965,6 +1993,7 @@ class GalvosController(QWidget):
             if self.checkBox_enable_save.isChecked():
                 print('stop saving...')
                 self.data_saver.stopSaving()
+                self.ai_task.removeDataConsumer(self.data_saver)
                 #self.data_saver.setBlockSize(512)
                 print('stop saving done!')
         #time.sleep(2)

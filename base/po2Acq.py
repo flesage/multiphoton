@@ -52,6 +52,13 @@ class PO2Acq(object):
         #self.po2_task.startTask()
         self.po2_task.WriteAnalogF64(self.n_pts*self.n_average,True,-1,DAQmx_Val_GroupByChannel,
             self.eom_data,byref(read),None)
+        
+                # wait until write is completeled
+        isDone = False
+        isDoneP = c_ulong()
+        while not isDone:
+            err = self.po2_task.IsTaskDone(byref(isDoneP))
+            isDone = isDoneP.value != 0
         #self.po2_task.waitUntilDone()
         self.po2_task.StopTask()
         

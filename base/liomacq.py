@@ -47,20 +47,34 @@ class AnalogInputTask(Task):
     def setFinite(self,finite):
         self.finite = finite
 
-    def setDataConsumer(self,consumer, wait, channel):
-
+    def setDataConsumer(self,consumer, wait, channel, consumerType, updateFlag):
         # Consumers list contains triplet of consumer, push method and channel to push
         self.consumers.append(consumer)
         self.consumers.append(wait)
         self.consumers.append(channel)
+        self.consumers.append(consumerType)
+        self.consumers.append(updateFlag)
+        
+    def updateConsumerFlag(self,consumerType,updateFlag):
+        print 'updating flag'
+        for i in range(len(self.consumers)):
+            if self.consumers[i] == consumerType:
+                self.consumers[i+1]=updateFlag
+        
         
     def removeDataConsumer(self,consumer):
+
+        listConsumer=[]
         for i in range(len(self.consumers)):
             if self.consumers[i] == consumer:
-                del self.consumers[i]
-                del self.consumers[i]
-                del self.consumers[i]
-                break
+                listConsumer.append(i)
+        listConsumer.sort(reverse = True)
+        for i in range(len(listConsumer)):
+            del self.consumers[listConsumer[i]]
+            del self.consumers[listConsumer[i]]
+            del self.consumers[listConsumer[i]]
+            del self.consumers[listConsumer[i]]
+            del self.consumers[listConsumer[i]]
 
 
     def setDecoder(self,decoder):
@@ -90,12 +104,13 @@ class AnalogInputTask(Task):
         # Push data to consumers requesting data with appropriate flags
         read = int32()
         self.ReadBinaryI16(self.n_pts,1,DAQmx_Val_GroupByChannel,self.data,self.n_pts*self.n_channels,byref(read),None)
-        for ic in range(0,len(self.consumers),3):
+        for ic in range(0,len(self.consumers),5):
             try:
                 local_data =  self.data[self.n_pts*self.consumers[ic+2]:self.n_pts*(self.consumers[ic+2]+1)]
-                if self.decoder is not None:
-                    local_data = self.decoder.decode(local_data)
-                self.consumers[ic].put(local_data,self.consumers[ic+1])
+                if (self.consumers[ic+4]==True): #only puts data in Queue if flag is set to 1 in consumer
+                    if self.decoder is not None:
+                        local_data = self.decoder.decode(local_data)
+                    self.consumers[ic].put(local_data,self.consumers[ic+1])
             except Queue.Full:
                 pass
         return 0 # The function should return an integer

@@ -84,18 +84,16 @@ if __name__ == '__main__':
     galvos.setSynchronizedAITask(ai_meas)
     
     # Set viewers, update at 10 Hz based on qt timer, can skip images if too slow
-    viewer = ChannelViewer('Channel 0')
-    viewer2 = ChannelViewer('Channel 1')
-    ai_meas.setDataConsumer(viewer,False,0)
-    ai_meas.setDataConsumer(viewer2,False,1)
+    viewer = ChannelViewer('Channel 0',0)
+    viewer2 = ChannelViewer('Channel 1',500)
+    ai_meas.setDataConsumer(viewer,False,0,'viewer',True)
+    ai_meas.setDataConsumer(viewer2,False,1,'viewer',True)
     timer = pg.QtCore.QTimer()
     timer.timeout.connect(viewer.update)
     timer.start(100)
     timer2 = pg.QtCore.QTimer()
     timer2.timeout.connect(viewer2.update)
     timer2.start(100)
-    
-
     
     # Start the gui controlling the galvos
     galvos_controller = GalvosController()
@@ -111,6 +109,8 @@ if __name__ == '__main__':
     galvos_controller.setImageViewer(viewer)
     galvos_controller.setImageViewer2(viewer2)
 
+    galvos_controller.move(150,0)
+    galvos_controller.resize(500,500)
     galvos_controller.show()
 
     
@@ -128,4 +128,5 @@ if __name__ == '__main__':
     timer.stop()
     timer2.stop()    
     galvos_controller.turnOffWheel3P()
+    galvos_controller.closeLaser()
     print 'killing GUI'
