@@ -23,7 +23,7 @@ from base.Motors import Motorsclass
 #from base.Motors import ZaberMotor
 from base.Motors import ThorlabsMotor
 #from base.Motors import RotationMotor
-from gui.ImageDisplay import ChannelViewer
+from gui.ImageDisplay import ChannelViewer, po2Viewer
 from gui.GalvosController import GalvosController
 from base.Maitai import Maitai
 from base.liomacq import OnDemandDigitalOutTask
@@ -85,6 +85,7 @@ if __name__ == '__main__':
     
     # Set viewers, update at 10 Hz based on qt timer, can skip images if too slow
     viewer = ChannelViewer('Channel 0',0)
+    po2viewer = po2Viewer('PO2 plot')
     viewer2 = ChannelViewer('Channel 1',500)
     ai_meas.setDataConsumer(viewer,False,0,'viewer',True)
     ai_meas.setDataConsumer(viewer2,False,1,'viewer',True)
@@ -108,6 +109,7 @@ if __name__ == '__main__':
     galvos_controller.set_brain_pos_reset()
     galvos_controller.setImageViewer(viewer)
     galvos_controller.setImageViewer2(viewer2)
+    galvos_controller.setPO2Viewer(po2viewer)
 
     galvos_controller.move(150,0)
     galvos_controller.resize(500,500)

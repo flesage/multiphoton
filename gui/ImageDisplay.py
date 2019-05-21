@@ -13,6 +13,30 @@ import math
 import random
 from vasc_seg.ScanLines import ScanLines
 import scipy.io as sio
+from PIL import Image
+
+class LineScanROI(pg.graphicsItems.ROI.ROI):
+ 
+    def __init__(self, pos1, pos2, width, **args):
+        pos1 = pg.Point(pos1)
+        pos2 = pg.Point(pos2)
+        d = pos2-pos1
+        l = d.length()
+        ang = pg.Point(1, 0).angle(d)
+        ra = ang * np.pi / 180.
+        c = pg.Point(-width/2. * math.sin(ra), -width/2. * math.cos(ra))
+        pos1 = pos1 + c
+        
+        pg.graphicsItems.ROI.ROI.__init__(self, pos1, size=pg.Point(l, width), angle=ang, **args)
+        self.addScaleRotateHandle([0, 0.5], [1, 0.5])
+        self.addScaleRotateHandle([1, 0.5], [0, 0.5])
+
+class PointROI(pg.graphicsItems.ROI.EllipseROI):
+
+    def __init__(self, pos, size, **args):
+        pg.graphicsItems.ROI.ROI.__init__(self, pos, size, **args)
+        self.aspectLocked = True
+
 
 class po2Viewer(Queue.Queue):
 
@@ -20,16 +44,34 @@ class po2Viewer(Queue.Queue):
         
         Queue.Queue.__init__(self,2)
         
-        self.po2plot = pg.plot(title=name)
+        self.po2plot = pg.PlotWidget(None)
         self.po2plot.setWindowTitle(name)
-
-        self.po2plot.move(1200, 500)
+        self.po2plot.plot(title=name)
+        self.po2plot.setTitle(name)
+        self.po2plot.setLabel('left', text='Intensity')
+        self.po2plot.setLabel('bottom', text='Time')
+        
         self.po2plot.resize(650, 450)
+        self.po2plot.move(1200, 500)
+        
+    def showPlot(self):
         self.po2plot.show()
+        
+    def update(self):
+        try:
+            data = self.get(False)
+            averageDecayCurve=np.mean(data,2)
+            x=np.linspace(0,averageDecayCurve.shape[0]/(1e6),averageDecayCurve.shape[0])
+            self.pg.plot(x,averageDecayCurve)
+            #- pour direct
+        except Queue.Empty:
+            # Ignore and preserve previous state of display
+            pass        
         #self.Scene.sigMouseClicked.connect(self.mouseMove   
      
 
 class ChannelViewer(Queue.Queue):
+
 
     def __init__(self, name,windowYPosition):
         
@@ -37,7 +79,6 @@ class ChannelViewer(Queue.Queue):
         
         self.imv = pg.ImageView(None, name)
         self.imv.setWindowTitle(name)
-        self.imi=self.imv.getImageItem()
         self.Scene=self.imv.scene
         self.lines = []
         self.rect = [] 
@@ -50,43 +91,87 @@ class ChannelViewer(Queue.Queue):
         self.rectSelected=-1
         #self.setTestImage()
         #self.generateAutoLines()
-        
+        self.displayLogo()
         # display and set on_click callback
+                        
         self.displayLines()
         self.imv.move(1200, windowYPosition)
         self.imv.resize(650, 450)
         self.imv.show()
+        self.imi=self.imv.getImageItem()
+        self.generatePointFlag=False
         self.Scene.sigMouseClicked.connect(self.onClick)
         #self.Scene.sigMouseClicked.connect(self.mouseMoved)
         
+    def displayLogo(self):
+        logo = np.asarray(Image.open('C:\git-projects\multiphoton\liom_logo.png'))
+        lim=np.shape(logo)
+        logo.setflags(write=1)
+        for i in range(int(lim[2])):
+            logoT=logo[:,:,i]
+            logoT=logoT.transpose()
+            logo[:,:,i]=logoT
+        self.imv.setImage(logo) 
+        
     def mouseMoved(self,pos):
-        print "Image position:", self.imi.mapSceneToView(pos)
+        print "Image position:", self.imi.mapToView(pos)
+        
+    def updateGeneratePointFlag(self,flag):
+        self.generatePointFlag=flag
         
     def onClick(self, event):
+        posMouse=self.imi.mapFromScene(event.scenePos())
         items=self.Scene.items(event.scenePos())
-        for i in items:
-            if isinstance(i, pg.LineROI):
-                self.lineSelected=i
-                if event.button()==2:
-                    self.removeSelectedLine()
-                elif event.button()==1:
-                    self.CurrentLineInfo=self.getMouseSelectedLinePosition()
-            if isinstance(i,pg.ROI):
-                self.rectSelected=i
-                if event.button()==2:
-                    self.removeSelectedRectangle()
-                elif event.button()==1:
-                    self.CurrentRectInfo=self.getMouseSelectedRectPosition()     
-            if isinstance(i,pg.CircleROI):
-                self.pointSelected=i
-                if event.button()==2:
-                    self.removeSelectedPoint()
-                    print('click!')
+        if (self.generatePointFlag):
+            if event.button()==1:
+                print 'generating point'
+                self.createPoint(posMouse.x(), posMouse.y())
+            elif event.button()==2:
+                for i in items:
+                    if isinstance(i,PointROI):
+                        self.pointSelected=i
+                        self.removeSelectedPoint()
+                        print('click!')
+        else:    
+            for i in items:
+                if isinstance(i, LineScanROI):
+                    self.lineSelected=i
+                    if event.button()==2:
+                        self.removeSelectedLine()
+                    elif event.button()==1:
+                        self.CurrentLineInfo=self.getMouseSelectedLinePosition()
+                if isinstance(i,pg.ROI):
+                    self.rectSelected=i
+                    if event.button()==2:
+                        self.removeSelectedRectangle()
+                    elif event.button()==1:
+                        self.CurrentRectInfo=self.getMouseSelectedRectPosition()     
+                if isinstance(i,PointROI):
+                    self.pointSelected=i
+                    if event.button()==2:
+                        self.removeSelectedPoint()
+                        print('click!')
                 #elif event.button()==1:
                     #self.CurrentPointInfo=self.getMouseSelectedPointPosition()                    
                     
     def createPoint(self,posX,posY):
-        self.points.append(pg.CircleROI([posX, posY], [1,1], pen=(4,9)))
+        self.points.append(PointROI([posX, posY],[5,5],pen=pg.mkPen('r',width=4.5)))
+        
+        #self.points.append(pointROI([posX, posY])) #pen=(4,9)
+        self.imv.addItem(self.points[-1])
+        self.getPositionPoints()
+        
+    def getPositionPoints(self):
+        x=[]
+        y=[]
+        if len(self.points)>0:
+            for point in self.points:
+                tempPos=point.pos()
+                x.append(tempPos[0])
+                y.append(tempPos[1])
+        else:
+            print('no points on Image')
+        return x,y
         
     def displayPoints(self):
         if len(self.points)>0:
@@ -173,7 +258,7 @@ class ChannelViewer(Queue.Queue):
         length=60;
         x2=x1+math.cos(angleLine)*length;
         y2=y1+math.sin(angleLine)*length;
-        self.lines.append(pg.LineROI([x1, y1], [x2, y2], width=1, pen=(1,9)))
+        self.lines.append(LineScanROI([x1, y1], [x2, y2], width=1, pen=pg.mkPen('y',width=3)))
         self.displayLines()
         
     def removeSelectedRectangle(self):
@@ -189,7 +274,7 @@ class ChannelViewer(Queue.Queue):
                     del self.rect[delRec]                      
             self.displayRectangles()
         else:
-            print('not enough lines to delete')
+            print('not enough rectangles to delete')
 
     def removeSelectedPoint(self):
         self.resetPoint()
@@ -203,7 +288,7 @@ class ChannelViewer(Queue.Queue):
                 counter=counter+1                    
             self.displayPoints()
         else:
-            print('not enough lines to delete')
+            print('not enough points to delete')
 
     def removeSelectedLine(self):
         self.resetLines()
@@ -227,7 +312,7 @@ class ChannelViewer(Queue.Queue):
         length=60;
         x2=x1+math.cos(angleLine)*length;
         y2=y1+math.sin(angleLine)*length;
-        self.lines.append(pg.LineROI([x1, y1], [x2, y2], width=1, pen=(1,9)))
+        self.lines.append(LineScanROI([x1, y1], [x2, y2], width=1, pen=pg.mkPen('y',width=3)))
         
     def generateAutoLines(self, 
                           scales=1, 
@@ -259,7 +344,7 @@ class ChannelViewer(Queue.Queue):
             x2=i[0,0]
             y2=i[0,1]
 
-            self.lines.append(pg.LineROI([x1, y1], [x2, 2*y1-y2], width=1, pen=(1,9)))
+            self.lines.append(LineScanROI([x1, y1], [x2, 2*y1-y2], width=1, pen=pg.mkPen('y',width=3)))
  
   
     def getCurrentImage(self):
@@ -276,6 +361,8 @@ class ChannelViewer(Queue.Queue):
         try:
             data = self.get(False)
             self.imv.setImage(-data)
+            self.imi=self.imv.getImageItem()
+
             #- pour direct
         except Queue.Empty:
             # Ignore and preserve previous state of display

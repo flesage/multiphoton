@@ -204,6 +204,7 @@ class GalvosController(QWidget):
         self.po2_x_positions = None
         self.po2_y_positions = None
         self.pushButton_startPO2.clicked.connect(self.start_po2_scan)
+        self.pushButton_po2AddPoint.clicked.connect(self.po2_add_point)
         
         #Channel 1 - 2: display
         self.pushButton_Channel_1.clicked.connect(self.showChannel1)
@@ -264,18 +265,6 @@ class GalvosController(QWidget):
         self.pushButton_preview.clicked.connect(self.changeDisplayValues)
         self.previewFlag=0;
         
-        #calibrateFOV
-        #self.pushButton_calibrateFOV.setEnabled(False)
-        #self.pushButton_calibrateFOV.clicked.connect(self.runFOVCalibration)
-        #self.pushButton_calibrateX.clicked.connect(self.runCalibrationX)
-        #self.pushButton_calibrateY.clicked.connect(self.runCalibrationY)
-        
-        #self.pushButtonRefImageX.clicked.connect(self.runReferenceX)
-        #self.pushButtonRefImageY.clicked.connect(self.runReferenceY)
-               
-        #self.pushButtonMoveX.clicked.connect(self.calibMoveX)
-        #self.pushButtonMoveY.clicked.connect(self.calibMoveY)       
-                
         self.runCalX=False
         self.runCalY=False
         
@@ -290,12 +279,26 @@ class GalvosController(QWidget):
         self.numberOfXPoints=3
         self.numberOfYPoints=4
         
-        
+        self.po2_add_point_state=True
+        self.tabWidget.setCurrentIndex(1)  
         
     #PO2 functons:
     
     def updateViewerConsumer(self,flag):
         self.ai_task.updateConsumerFlag('viewer',flag)
+    
+    def po2_add_point(self):
+        self.toggle_po2_add_point_state()
+        
+    def toggle_po2_add_point_state(self):
+        if (self.po2_add_point_state):
+            self.pushButton_po2AddPoint.setText('Stop adding points')
+            self.po2_add_point_state=False
+            self.viewer.updateGeneratePointFlag(True)
+        else:
+            self.pushButton_po2AddPoint.setText('Add Points')
+            self.po2_add_point_state=True
+            self.viewer.updateGeneratePointFlag(False)
     
     def defineROI_PO2(self):
         self.viewer.resetRect()
@@ -333,6 +336,28 @@ class GalvosController(QWidget):
                     self.viewer.createPoint(i,j)
             self.viewer.displayPoints()
             self.viewer.resetRect()
+            
+    def convertPosToVolts(self):
+        self.nx=float(self.lineEdit_nx.text())
+        self.ny=float(self.lineEdit_ny.text())
+        self.n_extra=float(self.lineEdit_extrapoints.text())
+        self.width=float(self.lineEdit_width.text())
+        self.height=float(self.lineEdit_height.text())
+         
+
+        [self.x_pos,self.y_pos]=self.viewer.getPositionPoints()
+        counter=0
+        lengthx = len(self.x_pos)
+        x_pos_grid=np.zeros(lengthx)
+        y_pos_grid=np.zeros(lengthx)
+        for i in range(lengthx):
+            y_pos_grid[counter]=(self.y_pos[i]-self.ny/2)*self.height/self.ny
+            x_pos_grid[counter]=(self.x_pos[i]-self.nx/2)*self.width/self.nx
+            counter=counter+1
+        x_pos_grid.astype(int)
+        y_pos_grid.astype(int)
+        self.po2_x_positions = x_pos_grid
+        self.po2_y_positions = y_pos_grid
 
     def modifyGrid_PO2(self):
         self.viewer.removeAllPoints()
@@ -347,10 +372,11 @@ class GalvosController(QWidget):
         self.viewer.resetRect()
         
     def start_po2_scan(self):
-
+        self.convertPosToVolts()
+        self.showPO2Viewer()
         self.ai_task.updateConsumerFlag('viewer',False)        
-        self.setPower2ph(0)
-        self.horizontalScrollBar_power2ph.setValue(0)        
+        
+        power2ph=self.horizontalScrollBar_power2ph.value()
         self.toggle_shutter2ph()
         print('Start po2 acquisition:')
         # Fermer EOM manuel
@@ -365,15 +391,19 @@ class GalvosController(QWidget):
         # Steps
         gate_on = float(self.lineEdit_po2_gate_on.text())
         gate_off = float(self.lineEdit_po2_gate_off.text())
-        voltage_on = 1.0
+        voltage_on = 2.0*power2ph/100.0
         n_averages = int(self.lineEdit_n_po2_averages.text())
         
         eom_task = PO2Acq(config.eom_device, config.eom_ao, gate_on, gate_off, voltage_on, n_averages)
         eom_task.config()
         # Acquire list of points to move to
         self.galvos.configOnDemand()
+        self.ai_task.setDecoder(None)
+        self.ai_task.setDataConsumer(self.po2viewer,True,0,'po2plot',True)
+        
         # Loop over points and:
         for i in range(self.po2_x_positions.shape[0]):
+            
             print('po2 measurements: ' + str(i+1) + ' out of ' + str(self.po2_x_positions.shape[0]))
             self.galvos.moveOnDemand(self.po2_x_positions[i], self.po2_y_positions[i])
             eom_task.start()
@@ -386,12 +416,13 @@ class GalvosController(QWidget):
         eom_task.close()
         self.galvos.ao_task.StopTask()
         self.galvos.ao_task.ClearTask()
+        self.ai_task.setDecoder(self.galvos)
         #self.viewer.removeAllPoints()
         # Remettre EOM Manuel
         self.power_ao_eom = OnDemandVoltageOutTask(config.eom_device, config.eom_ao, 'Power2Ph')
         print('po2 acquisition done!')
         self.ai_task.updateConsumerFlag('viewer',True)        
-
+        self.ai_task.removeDataConsumer(self.po2viewer)
 
     #PREVIEW VALUES
     def changeDisplayValues(self):
@@ -426,6 +457,11 @@ class GalvosController(QWidget):
     def showChannel2(self):
         self.viewer2.showWindow() 
  
+    def setPO2Viewer(self,viewer):
+        self.po2viewer=viewer
+        
+    def showPO2Viewer(self):
+        self.po2viewer.showPlot()
     #MULTIPLE LINE FUNCTIONS:
     
     def addLines(self):

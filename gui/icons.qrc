@@ -1,6 +1,7 @@
 <RCC>
   <qresource prefix="/icons/img">
     <file>organ.png</file>
+    <file>organ.png</file>
     <file>save_icon.png</file>
     <file>settings_icon.png</file>
     <file>Shutter_icon.png</file>

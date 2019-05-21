@@ -327,7 +327,7 @@
         </font>
        </property>
        <property name="currentIndex">
-        <number>4</number>
+        <number>0</number>
        </property>
        <widget class="QWidget" name="tab_3">
         <attribute name="title">
@@ -1180,7 +1180,7 @@
            <x>10</x>
            <y>10</y>
            <width>631</width>
-           <height>404</height>
+           <height>500</height>
           </rect>
          </property>
          <layout class="QVBoxLayout" name="verticalLayout_9">
@@ -2658,7 +2658,7 @@
                    </size>
                   </property>
                   <property name="text">
-                   <string>Define ROI</string>
+                   <string>Define Grid</string>
                   </property>
                  </widget>
                 </item>
@@ -2756,6 +2756,43 @@
                   </property>
                  </widget>
                 </item>
+                <item row="0" column="1">
+                 <layout class="QHBoxLayout" name="horizontalLayout_19">
+                  <item>
+                   <spacer name="horizontalSpacer_6">
+                    <property name="orientation">
+                     <enum>Qt::Horizontal</enum>
+                    </property>
+                    <property name="sizeHint" stdset="0">
+                     <size>
+                      <width>40</width>
+                      <height>20</height>
+                     </size>
+                    </property>
+                   </spacer>
+                  </item>
+                  <item>
+                   <widget class="QPushButton" name="pushButton_po2AddPoint">
+                    <property name="text">
+                     <string>Add Points</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <spacer name="horizontalSpacer_5">
+                    <property name="orientation">
+                     <enum>Qt::Horizontal</enum>
+                    </property>
+                    <property name="sizeHint" stdset="0">
+                     <size>
+                      <width>40</width>
+                      <height>20</height>
+                     </size>
+                    </property>
+                   </spacer>
+                  </item>
+                 </layout>
+                </item>
                </layout>
               </item>
              </layout>
@@ -2809,7 +2846,7 @@
             <item>
              <widget class="QLineEdit" name="lineEdit_po2_gate_off">
               <property name="text">
-               <string>375</string>
+               <string>275</string>
               </property>
              </widget>
             </item>
@@ -3617,6 +3654,7 @@
  </widget>
  <resources>
   <include location="icons.qrc"/>
+  <include location="logo.qrc"/>
  </resources>
  <connections/>
 </ui>
