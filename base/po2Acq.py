@@ -21,7 +21,8 @@ class PO2Acq(object):
     def __init__(self,device, ao_eom, gate_on, gate_off, voltage_on, n_average):
         self.device = device
         self.ao_po2 = ao_eom
-        self.po2_task = None       
+        self.po2_task = None     
+        self.ai_task = None  
         self.gate_on = gate_on
         self.gate_off = gate_off
         self.voltage_on = voltage_on 
@@ -44,26 +45,46 @@ class PO2Acq(object):
         self.po2_task = VoltageOutTask()
         self.po2_task.CreateAOVoltageChan(posixpath.join(self.device,self.ao_po2),"PO2",-10.0,10.0,DAQmx_Val_Volts,None)
         self.po2_task.CfgSampClkTiming("",freq,DAQmx_Val_Rising,DAQmx_Val_FiniteSamps,int(self.n_pts*self.n_average))
-        #self.ai_task.config(int(n_pts),freq)
-        #self.ai_task.CfgDigEdgeStartTrig (posixpath.join(self.device,"ao/StartTrigger"), DAQmx_Val_Falling)
+        if self.ai_task is not None:
+            self.ai_task.config(int(self.n_pts*self.n_average),freq,finite=True)
+            self.ai_task.CfgDigEdgeStartTrig (posixpath.join(self.device,"ao/StartTrigger"), DAQmx_Val_Falling)
 
+    def setSynchronizedAITask(self, ai_task)
+        self.ai_task = ai_task
+        
     def start(self):
+        if self.ai_task is not None:
+            self.ai_task.start()
+
         read = int32()
-        #self.po2_task.startTask()
+        # Task is started by Write which will trigger Ai task
         self.po2_task.WriteAnalogF64(self.n_pts*self.n_average,True,-1,DAQmx_Val_GroupByChannel,
             self.eom_data,byref(read),None)
         
-                # wait until write is completeled
+        # wait until write is completeled
         isDone = False
         isDoneP = c_ulong()
         while not isDone:
             err = self.po2_task.IsTaskDone(byref(isDoneP))
             isDone = isDoneP.value != 0
-        #self.po2_task.waitUntilDone()
+            
         self.po2_task.StopTask()
         
+        # make sure read is also completed
+        isDone = False
+        isDoneP = c_ulong()
+        while not isDone:
+            err = self.ai_task.IsTaskDone(byref(isDoneP))
+            isDone = isDoneP.value != 0
+            
+        self.ai_task.stopTask()
+        
     def close(self):
+        if self.ai_task is not None:
+            self.ai_task.clearTask()
+
         self.po2_task.StopTask()
         self.po2_task.ClearTask()
+
 
         

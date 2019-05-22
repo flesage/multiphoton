@@ -395,6 +395,7 @@ class GalvosController(QWidget):
         n_averages = int(self.lineEdit_n_po2_averages.text())
         
         eom_task = PO2Acq(config.eom_device, config.eom_ao, gate_on, gate_off, voltage_on, n_averages)
+        eom_task.setSynchronizedAITask(self.ai_task)
         eom_task.config()
         # Acquire list of points to move to
         self.galvos.configOnDemand()
@@ -407,6 +408,7 @@ class GalvosController(QWidget):
             print('po2 measurements: ' + str(i+1) + ' out of ' + str(self.po2_x_positions.shape[0]))
             self.galvos.moveOnDemand(self.po2_x_positions[i], self.po2_y_positions[i])
             eom_task.start()
+            # One second seems too much if you want to go faster
             time.sleep(1)
             print(str(self.po2_x_positions[i])+';'+str(self.po2_y_positions[i]))
 
