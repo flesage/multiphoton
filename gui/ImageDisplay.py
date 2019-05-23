@@ -59,10 +59,12 @@ class po2Viewer(Queue.Queue):
         
     def update(self):
         try:
+            print('getting data...')
             data = self.get(False)
-            averageDecayCurve=np.mean(data,2)
-            x=np.linspace(0,averageDecayCurve.shape[0]/(1e6),averageDecayCurve.shape[0])
-            self.pg.plot(x,averageDecayCurve)
+            #averageDecayCurve=np.mean(data,2)
+            #x=np.linspace(0,data/(1e6),data.shape[0])
+            self.po2plot.plot(data)
+            print('data plotted!')
             #- pour direct
         except Queue.Empty:
             # Ignore and preserve previous state of display
@@ -105,12 +107,8 @@ class ChannelViewer(Queue.Queue):
         
     def displayLogo(self):
         logo = np.asarray(Image.open('C:\git-projects\multiphoton\liom_logo.png'))
-        lim=np.shape(logo)
         logo.setflags(write=1)
-        for i in range(int(lim[2])):
-            logoT=logo[:,:,i]
-            logoT=logoT.transpose()
-            logo[:,:,i]=logoT
+        logo=logo.transpose((1,0,2))
         self.imv.setImage(logo) 
         
     def mouseMoved(self,pos):

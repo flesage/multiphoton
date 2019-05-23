@@ -109,7 +109,7 @@ class AnalogInputTask(Task):
                 local_data =  self.data[self.n_pts*self.consumers[ic+2]:self.n_pts*(self.consumers[ic+2]+1)]
                 if (self.consumers[ic+4]==True): #only puts data in Queue if flag is set to 1 in consumer
                     if self.decoder is not None:
-                        local_data = self.decoder.decode(local_data)
+                        local_data = self.decoder.decode(local_data)       
                     self.consumers[ic].put(local_data,self.consumers[ic+1])
             except Queue.Full:
                 pass

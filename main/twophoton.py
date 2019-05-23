@@ -89,6 +89,7 @@ if __name__ == '__main__':
     viewer2 = ChannelViewer('Channel 1',500)
     ai_meas.setDataConsumer(viewer,False,0,'viewer',True)
     ai_meas.setDataConsumer(viewer2,False,1,'viewer',True)
+
     timer = pg.QtCore.QTimer()
     timer.timeout.connect(viewer.update)
     timer.start(100)

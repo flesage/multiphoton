@@ -401,16 +401,18 @@ class GalvosController(QWidget):
         self.galvos.configOnDemand()
         self.ai_task.setDecoder(None)
         self.ai_task.setDataConsumer(self.po2viewer,True,0,'po2plot',True)
-        
+
         # Loop over points and:
         for i in range(self.po2_x_positions.shape[0]):
             
             print('po2 measurements: ' + str(i+1) + ' out of ' + str(self.po2_x_positions.shape[0]))
             self.galvos.moveOnDemand(self.po2_x_positions[i], self.po2_y_positions[i])
+            print('galvos moved...')
             eom_task.start()
             # One second seems too much if you want to go faster
             time.sleep(1)
             print(str(self.po2_x_positions[i])+';'+str(self.po2_y_positions[i]))
+            self.po2viewer.update()
 
         #    Start acquisition task averaging doing a finite ao task reapeated n average times
         #    Show in a plot the Decay curve
@@ -425,6 +427,7 @@ class GalvosController(QWidget):
         print('po2 acquisition done!')
         self.ai_task.updateConsumerFlag('viewer',True)        
         self.ai_task.removeDataConsumer(self.po2viewer)
+        timer.stop()
 
     #PREVIEW VALUES
     def changeDisplayValues(self):
