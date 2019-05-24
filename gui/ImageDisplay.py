@@ -14,6 +14,8 @@ import random
 from vasc_seg.ScanLines import ScanLines
 import scipy.io as sio
 from PIL import Image
+from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot
+
 
 class LineScanROI(pg.graphicsItems.ROI.ROI):
  
@@ -95,13 +97,14 @@ class ChannelViewer(Queue.Queue):
         #self.generateAutoLines()
         self.displayLogo()
         # display and set on_click callback
-                        
+        self.shift_display = 0  
         self.displayLines()
         self.imv.move(1200, windowYPosition)
         self.imv.resize(650, 450)
         self.imv.show()
         self.imi=self.imv.getImageItem()
         self.generatePointFlag=False
+        self.lineScanFlag=False
         self.Scene.sigMouseClicked.connect(self.onClick)
         #self.Scene.sigMouseClicked.connect(self.mouseMoved)
         
@@ -354,10 +357,36 @@ class ChannelViewer(Queue.Queue):
         s=250
         raw=raw[s,:,:]
         self.imv.setImage(-raw)
+        
+    def setLineScanFlag(self,status):
+        self.lineScanFlag=status
+    
+    @pyqtSlot(int)
+    def move_offset_display(self, shift_display):
+        self.shift_display = shift_display   
     
     def update(self):
         try:
             data = self.get(False)
+            
+            if (self.lineScanFlag):
+                #inverting reverse path
+                sizeArray = data.shape
+                rowIndicesToInvert=np.arange(0,sizeArray[0],2)
+                colIndices=np.arange(0,sizeArray[1],1)
+                colIndicesInvert=np.arange(sizeArray[1]-1,-1,-1)
+                tmp=data[rowIndicesToInvert,:]
+                tmp[:,colIndices]=tmp[:,colIndicesInvert]
+                data[rowIndicesToInvert,:]=tmp
+                #shifting of lines:
+                rowIndicesToRoll=np.arange(0,sizeArray[0],2)
+                colIndices=np.arange(0,sizeArray[1],1)
+                colIndicesRoll=np.roll(colIndices,self.shift_display)
+                tmp=data[rowIndicesToRoll,:]
+                tmp[:,colIndices]=tmp[:,colIndicesRoll]
+                data[rowIndicesToRoll,:]=tmp
+                data=data.transpose()
+
             self.imv.setImage(-data)
             self.imi=self.imv.getImageItem()
 

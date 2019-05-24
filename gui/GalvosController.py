@@ -575,21 +575,44 @@ class GalvosController(QWidget):
         self.zstep=float(self.lineEdit_zstep.text())
         self.depthVector=np.arange(0,1000.0,self.zstep)/1000.0
         
-        f2 = interp1d(self.positionVectorArray, self.powerVectorArray, kind='cubic',fill_value='extrapolate')
+        f2 = interp1d(self.positionVectorArray, self.powerVectorArray, kind='quadratic',fill_value='extrapolate')
         self.powerCurve=f2(self.depthVector)
         self.powerCurve[self.powerCurve >= 100] = 100
+        self.powerCurve[self.powerCurve <= 0] = 0
+        firstindex=np.searchsorted(self.powerCurve, 100)
+        indices=np.arange(firstindex,len(self.powerCurve),1)
+        vals=100*np.ones(len(indices))
+        self.powerCurve[indices]=vals
         
-    def showPowerCurve(self):  
-        fig, ax = plt.subplots()        
+        
+    def showPowerCurve(self):
+        self.TwoPplot = pg.PlotWidget(None)
+        self.TwoPplot.setWindowTitle('2P power curve')
+        self.TwoPplot.plot(title='2P power curve')
+        self.TwoPplot.setTitle('2P power curve')
+        self.TwoPplot.setLabel('left', text='Intensity')
+        self.TwoPplot.setLabel('bottom', text='Depth')
+        self.TwoPplot.resize(650, 450)
+        self.TwoPplot.move(1200, 500)  
+        self.TwoPplot.show()
         self.generatePowerCurve()
-        ax.plot(self.depthVector, self.powerCurve)
-        ax.plot(self.positionVector,self.powerVector,linestyle="None", marker='o', color='r')
-        ax.grid(True)
-        plt.xlabel('axial position [mm]')
-        plt.ylabel('power [%]')
-        plt.title('Power curve 2P')
-        plt.ylim(0,110)
-        plt.show()
+        self.TwoPplot.plot(self.depthVector, self.powerCurve)
+        #self.TwoPplot.setData(self.positionVector,self.powerVector)#,pen=None, symbol='o', symbolPen=None, symbolSize=4, symbolBrush=('r'))
+        scatter = pg.ScatterPlotItem(pen=pg.mkPen(width=5, color='r'), symbol='o', size=1)
+        self.TwoPplot.addItem(scatter)
+        scatter.setData(self.positionVector,self.powerVector)
+
+        
+        #fig, ax = plt.subplots()        
+        #self.generatePowerCurve()
+        #ax.plot(self.depthVector, self.powerCurve)
+        #ax.plot(self.positionVector,self.powerVector,linestyle="None", marker='o', color='r')
+        #ax.grid(True)
+        #plt.xlabel('axial position [mm]')
+        #plt.ylabel('power [%]')
+        #plt.title('Power curve 2P')
+        #plt.ylim(0,110)
+        #plt.show()
 
     #POWER CURVE:    
         
@@ -1144,13 +1167,9 @@ class GalvosController(QWidget):
         self.pushButton_add_power_val_3P.setEnabled(True)
         
     def get_current_z_depth(self):
-        print 'in current z depth'
-        print self.brainPosSetFlag
         if self.brainPosSetFlag==1:
-            print 'brain set...'
             self.abs_pos=self.motors.get_pos(3)
             self.currentZPos=float(self.brain_pos)-float(self.abs_pos)
-            print self.currentZPos            
             self.lineEdit_currentZpos.setText(str(self.currentZPos))
         else:
             print 'brain position not set yet!'
@@ -1182,17 +1201,24 @@ class GalvosController(QWidget):
         self.timerLS.timeout.connect(self.stoplinescanTimer)
         timeOffset=1.1 #offset of seconds measured   
         self.timestep=(float(self.lineEdit_TimePerLine.text())+timeOffset)*1000
+        self.make_connection_offset_X()
+        self.make_connection_offset_Y()
+        self.make_connection_offset_Display()
+        shift_display=self.horizontalScrollBar_line_scan_shift_display.value()
+        self.viewer.move_offset_display(shift_display)
+        self.viewer2.move_offset_display(shift_display)        
         self.runlinescanTimer()
         print('timestep of:' + str(int(self.timestep)))
         self.hideLines()
         
     def runlinescanTimer(self):
-
+        
+        self.viewer.setLineScanFlag(True)
+        self.viewer2.setLineScanFlag(True)
         self.timerLS.start(self.timestep)        
         
         self.pushButtonStartMultipleLineAcq.setEnabled(False)
         self.pushButtonStopMultipleLineAcq.setEnabled(True)
-        print('in START MULTIPLE LINES // TIMER')  
         self.toggle_shutter2ph()
         self.get_current_z_depth()
         self.updateNumberOfLines()
@@ -1279,7 +1305,7 @@ class GalvosController(QWidget):
         self.label_lineScanAcq.setText(txt)
 
     def abortlinescanTimer(self):
-        print('Abort linescan')
+        print('Aborting linescan')
         self.currentLine=self.numberOfLines-1
         self.stoplinescanTimer()
             
@@ -1304,20 +1330,23 @@ class GalvosController(QWidget):
             self.pushButton_get_line_position.setEnabled(True)
             self.pushButton_start.setEnabled(True)      
             self.currentLine=0
+            self.viewer.setLineScanFlag(False)
+            self.viewer2.setLineScanFlag(False)
         else:
             time.sleep(2)
             self.currentLine = self.currentLine + 1
             self.runlinescanTimer()
             print('running next acquisition:...')
+
             
         
     def startlinescan(self):
         x_0_px, y_0_px, x_e_px, y_e_px, linescan_length_px = self.viewer.getMouseSelectedLinePosition()
-        self.galvos.setSaveMode(False)
+        self.viewer.setLineScanFlag(True)
+        self.viewer2.setLineScanFlag(True)
         if (x_0_px==0 and y_0_px==0 and x_e_px==0 and y_e_px==0):
             print("no lines selected!")
         else:
-            
             self.toggle_shutter2ph()
             self.viewer.toggleLinearSelection()
             self.make_connection_offset_X()
@@ -1364,13 +1393,14 @@ class GalvosController(QWidget):
             linescan_width_um = math.sqrt(math.pow((x_e_um-x_0_um),2)+math.pow((y_e_um-y_0_um),2))
             
             shift_display=self.horizontalScrollBar_line_scan_shift_display.value()
-                    
+            self.viewer.move_offset_display(shift_display)
+            self.viewer2.move_offset_display(shift_display)
+            
             self.galvos.setLineRamp(y_0_um,x_0_um,y_e_um,x_e_um,npts,n_lines,n_extra,line_rate,shift_display)
             self.galvos_stopped = False
             self.pushButton_start.setEnabled(False)
     
             if self.checkBox_enable_save.isChecked():
-                self.galvos.setSaveMode(True)
                 self.data_saver=DataSaver(self.save_filename)
                 self.mouseName=self.lineEdit_mouse_name.text()
                 self.scanType = 'LineScan'      
@@ -1417,18 +1447,15 @@ class GalvosController(QWidget):
         self.pushButton_get_line_position.setEnabled(True)
         if self.checkBox_enable_save.isChecked():
             self.data_saver.stopSaving()
-            self.galvos.setSaveMode(False)
-
-                        
+            self.ai_task.removeDataConsumer(self.data_saver)
         self.galvos.stopTask()    
         self.galvos_stopped = True
-        self.ai_task.removeDataConsumer(self.data_saver)
         self.pushButton_start.setEnabled(True)
-
+        self.viewer.setLineScanFlag(False)
+        self.viewer2.setLineScanFlag(False)
         
     def startscan(self):
         #self.liveScanNumber=self.liveScanNumber+1;
-        
         self.previewScanFlag = True
         self.pushButton_stop.setEnabled(True)
         self.pushButton_start.setEnabled(False)
@@ -1675,6 +1702,8 @@ class GalvosController(QWidget):
     #MULTIPLE LINE SCANS
     
     def start_multiple_lines(self):
+        self.viewer.setLineScanFlag(True)
+        self.viewer2.setLineScanFlag(True)
         self.pushButtonStartMultipleLineAcq.setEnabled(False)
         self.pushButtonStopMultipleLineAcq.setEnabled(True)
         print('in START MULTIPLE LINES')  
@@ -1776,6 +1805,8 @@ class GalvosController(QWidget):
         print('stop pushed...')
         self.galvos_stopped=True
         print('...done!')
+        self.viewer.setLineScanFlag(False)
+        self.viewer2.setLineScanFlag(False)
 
     def make_connection_multiple_lines(self,slider_object):
         print('making connection multiple lines...')
@@ -2080,19 +2111,14 @@ class GalvosController(QWidget):
         #time.sleep(2)
         
     def make_connection_offset_X(self):
-        print('in make connection offset')
         self.horizontalScrollBar_line_scan_shift_x.valueChanged.connect(self.galvos.move_offset_X)        
-        print('done: in make connection offset')
 
     def make_connection_offset_Y(self):
-        print('in make connection offset')
         self.horizontalScrollBar_line_scan_shift_y.valueChanged.connect(self.galvos.move_offset_Y)        
-        print('done: in make connection offset')
         
     def make_connection_offset_Display(self):
-        print('in make connection offset')
-        self.horizontalScrollBar_line_scan_shift_display.valueChanged.connect(self.galvos.move_offset_display)        
-        print('done: in make connection offset')
+        self.horizontalScrollBar_line_scan_shift_display.valueChanged.connect(self.viewer.move_offset_display)        
+        self.horizontalScrollBar_line_scan_shift_display.valueChanged.connect(self.viewer2.move_offset_display)        
     
     def set_iteration_number(self,val):
         self.iterationNumber=val

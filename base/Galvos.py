@@ -289,8 +289,6 @@ class Galvos():
     @pyqtSlot(int)
     def move_offset_Y(self, center_y):
         self.center_y = center_y      
-        
-          
 
     def move(self,center_x,center_y):
         print('move called!')
@@ -342,7 +340,7 @@ class Galvos():
                 self.t1.join()
                 self.ao_task.StopTask()
                 self.ao_task.ClearTask()
-                print('Tasks cleared!')
+                #print('Tasks cleared!')
 
         # Not clear this needs to be done here.
         if self.clock_task is not None:
@@ -357,14 +355,6 @@ class Galvos():
             self.ai_task.clearTask()
         self.ao_task.ClearTask()
 
-    @pyqtSlot(int)
-    def move_offset_display(self, shift_display):
-        print('in slot, shift display:' + str(self.shift_display))
-        self.shift_display = shift_display   
-        
-    def setSaveMode(self,status):
-        self.save_mode_on=status
-        
     def decode(self,data):
 
         if self.ramp_type == 0:
@@ -375,26 +365,6 @@ class Galvos():
 
         elif self.ramp_type == 2:            
             image=np.reshape(data,(self.ny,(self.nx+self.n_extra)))
-            #remove first weird line
-            #tmp=np.average(image[1:-1,:].ravel())
-            #image[0,:]=tmp
-            #if (self.save_mode_on==False):
-            print('in decoder, shift display:' + str(self.shift_display))
-            #inverting reverse path
-            sizeArray = image.shape
-            rowIndicesToInvert=np.arange(0,sizeArray[0],2)
-            colIndices=np.arange(0,sizeArray[1],1)
-            colIndicesInvert=np.arange(sizeArray[1]-1,-1,-1)
-            tmp=image[rowIndicesToInvert,:]
-            tmp[:,colIndices]=tmp[:,colIndicesInvert]
-            image[rowIndicesToInvert,:]=tmp
-            #shifting of lines:
-            rowIndicesToRoll=np.arange(0,sizeArray[0],2)
-            colIndices=np.arange(0,sizeArray[1],1)
-            colIndicesRoll=np.roll(colIndices,self.shift_display)
-            tmp=image[rowIndicesToRoll,:]
-            tmp[:,colIndices]=tmp[:,colIndicesRoll]
-            image[rowIndicesToRoll,:]=tmp
-            image=image.transpose()
+
         return image
 
