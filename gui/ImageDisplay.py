@@ -86,7 +86,6 @@ class ChannelViewer(Queue.Queue):
         self.rect = [] 
         self.points = []
         self.rectFlag = []
-        self.lineScanFlag=False
 
         #self.generateRandomLine()
         self.linescan_not_displayed=0
@@ -356,14 +355,9 @@ class ChannelViewer(Queue.Queue):
         raw=raw[s,:,:]
         self.imv.setImage(-raw)
     
-    def changeLineScanFlagStatus(self,status):
-        self.lineScanFlag=status
-    
     def update(self):
         try:
             data = self.get(False)
-            if(self.lineScanFlag==True):
-                data=data.transpose()
             self.imv.setImage(-data)
             self.imi=self.imv.getImageItem()
 
