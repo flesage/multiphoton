@@ -1314,6 +1314,8 @@ class GalvosController(QWidget):
     def startlinescan(self):
         x_0_px, y_0_px, x_e_px, y_e_px, linescan_length_px = self.viewer.getMouseSelectedLinePosition()
         self.galvos.setSaveMode(False)
+        self.viewer.changeLineScanFlagStatus(True)
+        self.viewer2.changeLineScanFlagStatus(True)
         if (x_0_px==0 and y_0_px==0 and x_e_px==0 and y_e_px==0):
             print("no lines selected!")
         else:
@@ -1415,16 +1417,16 @@ class GalvosController(QWidget):
         self.pushButton_start_linescan.setEnabled(True)
         self.pushButton_stop_linescan.setEnabled(False)
         self.pushButton_get_line_position.setEnabled(True)
+
         if self.checkBox_enable_save.isChecked():
             self.data_saver.stopSaving()
             self.ai_task.removeDataConsumer(self.data_saver)
             self.galvos.setSaveMode(False)
+        self.viewer.changeLineScanFlagStatus(False)
+        self.viewer2.changeLineScanFlagStatus(False)
+        self.galvos.stopTask()    
+        self.galvos_stopped = True
 
-        self.galvos.stopTask()    
-        self.galvos_stopped = True
-                        
-        self.galvos.stopTask()    
-        self.galvos_stopped = True
         self.pushButton_start.setEnabled(True)
 
         

@@ -379,22 +379,22 @@ class Galvos():
             #tmp=np.average(image[1:-1,:].ravel())
             #image[0,:]=tmp
             #if (self.save_mode_on==False):
-            print('in decoder, shift display:' + str(self.shift_display))
+            #print('in decoder, shift display:' + str(self.shift_display))
             #inverting reverse path
-            sizeArray = image.shape
-            rowIndicesToInvert=np.arange(0,sizeArray[0],2)
-            colIndices=np.arange(0,sizeArray[1],1)
-            colIndicesInvert=np.arange(sizeArray[1]-1,-1,-1)
-            tmp=image[rowIndicesToInvert,:]
-            tmp[:,colIndices]=tmp[:,colIndicesInvert]
-            image[rowIndicesToInvert,:]=tmp
+            #sizeArray = image.shape
+            #rowIndicesToInvert=np.arange(0,sizeArray[0],2)
+            #colIndices=np.arange(0,sizeArray[1],1)
+            #colIndicesInvert=np.arange(sizeArray[1]-1,-1,-1)
+            #tmp=image[rowIndicesToInvert,:]
+            #tmp[:,colIndices]=tmp[:,colIndicesInvert]
+            #image[rowIndicesToInvert,:]=tmp
             #shifting of lines:
-            rowIndicesToRoll=np.arange(0,sizeArray[0],2)
-            colIndices=np.arange(0,sizeArray[1],1)
-            colIndicesRoll=np.roll(colIndices,self.shift_display)
-            tmp=image[rowIndicesToRoll,:]
-            tmp[:,colIndices]=tmp[:,colIndicesRoll]
-            image[rowIndicesToRoll,:]=tmp
-            image=image.transpose()
+            #rowIndicesToRoll=np.arange(0,sizeArray[0],2)
+            #colIndices=np.arange(0,sizeArray[1],1)
+            #colIndicesRoll=np.roll(colIndices,self.shift_display)
+            #tmp=image[rowIndicesToRoll,:]
+            #tmp[:,colIndices]=tmp[:,colIndicesRoll]
+            #image[rowIndicesToRoll,:]=tmp
+            #image=image.transpose()
         return image
 
