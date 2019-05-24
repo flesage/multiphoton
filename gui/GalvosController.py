@@ -28,6 +28,7 @@ from base.liomio import DataSaver
 from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot
 import posixpath
 from gui.ImageDisplay import po2Viewer
+from base.Motors import ThorlabsMotor
 
 import ImageDisplay as imdisp
 from scipy.interpolate import interp1d
@@ -150,8 +151,6 @@ class GalvosController(QWidget):
         self.pushButton_center.setEnabled(False)
         self.brainPosSetFlag = 0
         
-
-        
         #Stack acquisition:
         self.pushButton_start_stack.clicked.connect(self.start_stack_thread)
         self.pushButton_stop_stack.clicked.connect(self.stop_stack)   
@@ -179,22 +178,15 @@ class GalvosController(QWidget):
         self.pushButton_start_linescan.setEnabled(True)
         self.pushButton_stop_linescan.setEnabled(False)
         self.pushButton_snap_angio.clicked.connect(self.take_snapshot)
-        
         self.horizontalScrollBar_line_scan_shift_y.setValue(-20)
         self.horizontalScrollBar_line_scan_shift_x.setValue(0)
         self.horizontalScrollBar_line_scan_shift_display.setValue(106)
-        
         self.horizontalScrollBar_line_scan_shift_y.valueChanged.connect(self.update_linescan)
         self.horizontalScrollBar_line_scan_shift_x.valueChanged.connect(self.update_linescan)
-        
         self.horizontalScrollBar_line_scan_shift_x.valueChanged.connect(self.shift_x_changed_value)
-
         self.horizontalScrollBar_line_scan_shift_y.valueChanged.connect(self.shift_y_changed_value)
         self.horizontalScrollBar_line_scan_shift_display.valueChanged.connect(self.shift_display_changed_value)
-
-        
         self.horizontalScrollBar_line_scan_shift_display.valueChanged.connect(self.update_linescan)
-        
         self.pushButton_start_linescan.clicked.connect(self.startlinescan)
         self.pushButton_stop_linescan.clicked.connect(self.stoplinescan)   
         self.previewScanFlag = False
@@ -213,7 +205,6 @@ class GalvosController(QWidget):
         #Power curve:
         self.positionVector=[]
         self.powerVector=[]
-        
         self.pushButton_add_power_val.clicked.connect(self.addPowerValue)
         self.pushButton_clear_curve.clicked.connect(self.clearCurve)
         self.checkBoxPowerCurve.setEnabled(False)
@@ -224,7 +215,6 @@ class GalvosController(QWidget):
         #Power curve 3P:
         self.positionVector3P=[]
         self.powerVector3P=[]
-        
         self.pushButton_add_power_val_3P.clicked.connect(self.addPowerValue3P)
         self.pushButton_clear_curve_3P.clicked.connect(self.clearCurve3P)
         self.pushButton_add_power_val_3P.setEnabled(False)
@@ -232,11 +222,9 @@ class GalvosController(QWidget):
         self.pushButton_show_curve3P.setEnabled(False)
         self.checkBoxPowerCurve3P.setEnabled(False)
 
-
         #Saving:
         self.pushButton_select_save_directory.clicked.connect(self.select_saving_directory)
         self.lineEdit_mouse_name.setEnabled(False)
-
         self.checkBox_enable_save.setEnabled(False)
 
         #Save folder:
@@ -246,6 +234,8 @@ class GalvosController(QWidget):
         self.pushButton_set_save_name.clicked.connect(self.create_new_folder)
         
         # 3P Wheel:
+        self.pushButton_3PWheel_Activate.clicked.connect(self.toggle3PWheel)
+        self.enableWheelFlag = 0
         self.flagWheel = 1
         
         #Multiple lines:
@@ -281,6 +271,46 @@ class GalvosController(QWidget):
         
         self.po2_add_point_state=True
         self.tabWidget.setCurrentIndex(1)  
+        
+    #Wheel 3P:
+    def toggle3PWheel(self):
+        if (self.enableWheelFlag==0):
+            print('Initialising 3P rotative motor...')
+            self.thorlabs = ThorlabsMotor(self.thorlabsWheelSN, self.thorlabsWheelHW)
+            status=True
+            self.enableWheelFlag=1
+            self.pushButton_3PWheel_Activate.setEnabled(False)
+            #self.pushButton_3PWheel_Activate.setStyleSheet("background-color: red");
+            #self.pushButton_3PWheel_Activate.setText('Disable Wheel')            
+            print('...done!')
+        #else:
+        #    self.pushButton_3PWheel_Activate.setStyleSheet("background-color: pale gray");
+        #    self.pushButton_3PWheel_Activate.setText('Activate Wheel')     
+        #    print('Killing 3P Motor...')
+        #    self.turnOffWheel3P()
+        #    self.thorlabs.clean_up_APT()
+        #    status=False
+        #    self.enableWheelFlag=0
+        #    print('...done!')
+        self.pushButton_set_3Ph_power_minimum.setEnabled(status)
+        self.pushButton_set_3Ph_power_maximum.setEnabled(status)
+        self.pushButton_reset_3Ph_wheel.setEnabled(status)
+        self.horizontalScrollBar_power3ph.setEnabled(status)
+        self.label_3PhWheel.setEnabled(status)
+        self.label_power3P.setEnabled(status)
+        
+    def kill3PWheel(self):
+        if (self.enableWheelFlag==1):
+            print('Killing 3P Motor...')
+            self.thorlabs.clean_up_APT()
+            self.turnOffWheel3P()
+            print('...done!')
+
+        
+    def getInfoThorlabsWheel(self,SN,HW):
+        self.thorlabsWheelSN=SN
+        self.thorlabsWheelHW=HW
+    
         
     #PO2 functons:
     
@@ -662,8 +692,9 @@ class GalvosController(QWidget):
 
         
     def get_line_pos(self):
+        print('in get line position')
         linescan_px_x_1, linescan_px_y_1, linescan_px_x_2, linescan_px_y_2, linescan_length_px = self.viewer.getMouseSelectedLinePosition()
-
+        print(str(linescan_px_x_1))
         nx=int(self.lineEdit_nx.text())   
         ny=int(self.lineEdit_ny.text())   
         width=float(self.lineEdit_width.text())          
@@ -681,7 +712,7 @@ class GalvosController(QWidget):
         
         strCoord=str(center_x)+'/'+str(center_y)
             
-        txtCoord = open(r"C:\git-projects\twophoton\coordinates.txt","w") 
+        txtCoord = open(r"C:\git-projects\multiphoton\coordinates.txt","w") 
         txtCoord.write(strCoord)
         txtCoord.close()
         
@@ -922,11 +953,20 @@ class GalvosController(QWidget):
         thread = threading.Thread(target=self.wheel_run, args=(command,))
         thread.start()
         self.horizontalScrollBar_power3ph.setValue(100)
-        print('done!')   
+        print('done!')
+        
+    def gotoMaximumPower3ph_nothread(self):
+        print('going to maximum value with 3Ph motors...')
+        wheel3P_angle=self.wheel3PMax
+        command = self.wheel3P_angle_offset+wheel3P_angle
+        self.flagWheel = 0
+        self.wheel_run(command)
+        self.horizontalScrollBar_power3ph.setValue(100)
+        print('done!')  
 
     def turnOffWheel3P(self):
         self.shutter3ph.off() 
-        self.gotoMaximumPower3ph()
+        self.gotoMaximumPower3ph_nothread()
 
     def wheel_run(self,command):
         print "Starting rotation:"
@@ -1273,7 +1313,7 @@ class GalvosController(QWidget):
         
     def startlinescan(self):
         x_0_px, y_0_px, x_e_px, y_e_px, linescan_length_px = self.viewer.getMouseSelectedLinePosition()
-
+        self.galvos.setSaveMode(False)
         if (x_0_px==0 and y_0_px==0 and x_e_px==0 and y_e_px==0):
             print("no lines selected!")
         else:
@@ -1323,13 +1363,14 @@ class GalvosController(QWidget):
             
             linescan_width_um = math.sqrt(math.pow((x_e_um-x_0_um),2)+math.pow((y_e_um-y_0_um),2))
             
-            shift_display=self.linescan_shift_display
+            shift_display=self.horizontalScrollBar_line_scan_shift_display.value()
                     
             self.galvos.setLineRamp(y_0_um,x_0_um,y_e_um,x_e_um,npts,n_lines,n_extra,line_rate,shift_display)
             self.galvos_stopped = False
             self.pushButton_start.setEnabled(False)
     
             if self.checkBox_enable_save.isChecked():
+                self.galvos.setSaveMode(True)
                 self.data_saver=DataSaver(self.save_filename)
                 self.mouseName=self.lineEdit_mouse_name.text()
                 self.scanType = 'LineScan'      
@@ -1377,6 +1418,7 @@ class GalvosController(QWidget):
         if self.checkBox_enable_save.isChecked():
             self.data_saver.stopSaving()
             self.ai_task.removeDataConsumer(self.data_saver)
+            self.galvos.setSaveMode(False)
 
         self.galvos.stopTask()    
         self.galvos_stopped = True

@@ -293,6 +293,7 @@ class Galvos():
           
 
     def move(self,center_x,center_y):
+        print('move called!')
         self.center_x = center_x
         self.center_y = center_y
 
@@ -358,7 +359,11 @@ class Galvos():
 
     @pyqtSlot(int)
     def move_offset_display(self, shift_display):
+        print('in slot, shift display:' + str(self.shift_display))
         self.shift_display = shift_display   
+        
+    def setSaveMode(self,status):
+        self.save_mode_on=status
         
     def decode(self,data):
 
@@ -368,14 +373,13 @@ class Galvos():
         elif self.ramp_type == 1:
             image=np.reshape(data,(self.ny,(self.nx+self.n_extra)))
 
-        elif self.ramp_type == 2:
-            
-            
+        elif self.ramp_type == 2:            
             image=np.reshape(data,(self.ny,(self.nx+self.n_extra)))
             #remove first weird line
-            tmp=np.average(image[1:-1,:].ravel())
-            image[0,:]=tmp
-            
+            #tmp=np.average(image[1:-1,:].ravel())
+            #image[0,:]=tmp
+            #if (self.save_mode_on==False):
+            print('in decoder, shift display:' + str(self.shift_display))
             #inverting reverse path
             sizeArray = image.shape
             rowIndicesToInvert=np.arange(0,sizeArray[0],2)
@@ -392,8 +396,5 @@ class Galvos():
             tmp[:,colIndices]=tmp[:,colIndicesRoll]
             image[rowIndicesToRoll,:]=tmp
             image=image.transpose()
-
-            
-
         return image
 

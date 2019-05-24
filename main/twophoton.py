@@ -21,7 +21,6 @@ from base.liomacq import AnalogInputTask
 from base.liomacq import OnDemandVoltageOutTask
 from base.Motors import Motorsclass
 #from base.Motors import ZaberMotor
-from base.Motors import ThorlabsMotor
 #from base.Motors import RotationMotor
 from gui.ImageDisplay import ChannelViewer, po2Viewer
 from gui.GalvosController import GalvosController
@@ -59,9 +58,7 @@ if __name__ == '__main__':
     motors = Motorsclass(config.motorscomport, config.motorsbaud)
     print('...done!')
     
-    print('Initialising 3P rotative motor...')
-    rotmotor3P = ThorlabsMotor(config.rotMot3P_SN, config.rotMot3P_HW)
-    print('...done!')
+    #rotmotor3P = ThorlabsMotor(config.rotMot3P_SN, config.rotMot3P_HW)
 
 #   power_motor = RotationMotor(config.laser_intensity_device)
     #laser = Maitai(config.comPortLaser)    
@@ -99,13 +96,14 @@ if __name__ == '__main__':
     
     # Start the gui controlling the galvos
     galvos_controller = GalvosController()
+    galvos_controller.getInfoThorlabsWheel(config.rotMot3P_SN,config.rotMot3P_HW)
     galvos_controller.setGalvos(galvos)
     galvos_controller.setShutter2Ph(shutter2ph)
     galvos_controller.setShutter3Ph(shutter3ph)
     galvos_controller.setAoEOM(power2ph)
     galvos_controller.setMotors(motors)
     #galvos_controller.setMaitai(laser)
-    galvos_controller.setThorlabs(rotmotor3P)
+    #galvos_controller.setThorlabs(rotmotor3P)
     galvos_controller.setAiTask(ai_meas)
     galvos_controller.set_brain_pos_reset()
     galvos_controller.setImageViewer(viewer)
@@ -130,6 +128,7 @@ if __name__ == '__main__':
     
     timer.stop()
     timer2.stop()    
-    galvos_controller.turnOffWheel3P()
+    #galvos_controller.turnOffWheel3P()
+    galvos_controller.kill3PWheel()
     galvos_controller.closeLaser()
     print 'killing GUI'
