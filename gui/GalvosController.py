@@ -16,6 +16,7 @@ from PyQt5 import uic
 from PyQt5.QtWidgets import QWidget, QFileDialog
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QVBoxLayout, QSizePolicy, QMessageBox, QPushButton
 from PyQt5.QtGui import QIcon
+from PyQt5.QtGui import QIntValidator
 from scipy import signal
 from base.Maitai import Maitai
 
@@ -272,6 +273,9 @@ class GalvosController(QWidget):
         self.po2_add_point_state=True
         self.tabWidget.setCurrentIndex(1)  
         
+        self.lineEdit_linerate.setValidator(QIntValidator(0, 260))
+
+        
     #Wheel 3P:
     def toggle3PWheel(self):
         if (self.enableWheelFlag==0):
@@ -469,15 +473,19 @@ class GalvosController(QWidget):
             self.lineEdit_ny.setText('256')
             self.lineEdit_linerate.setText('300')            
             self.pushButton_preview.setText('Undo')
+            self.checkBox_save_flag_enabled=self.checkBox_enable_save.isEnabled()
+            self.checkBox_save_flag_checked=self.checkBox_enable_save.isChecked()
+            self.checkBox_enable_save.setChecked(False)
+            self.checkBox_enable_save.setEnabled(False)  
             self.previewFlag=1
         else: 
             self.lineEdit_nx.setText(self.nxTemp)
             self.lineEdit_ny.setText(self.nxTemp)
             self.lineEdit_linerate.setText(self.linerateTemp)            
             self.pushButton_preview.setText('Preview')
+            self.checkBox_enable_save.setChecked(self.checkBox_save_flag_checked)
+            self.checkBox_enable_save.setEnabled(self.checkBox_save_flag_enabled)
             self.previewFlag=0
-            
-        
     #IMAGE VIEWER FUNCTIONS:    
         
     def setImageViewer(self,viewer):
@@ -673,7 +681,6 @@ class GalvosController(QWidget):
             self.toggleLineFlag=1
             self.toggle_linescanDisplayButton(False)
         else:        
-            self.toggle_linescanDisplayButton(True)
             self.toggleLineFlag=0
             
     def toggle_linescanDisplayButton(self,val):
@@ -2285,7 +2292,7 @@ class GalvosController(QWidget):
         options |= QFileDialog.ShowDirsOnly
         
         self.save_filename,_ = QFileDialog.getOpenFileName(self,"Choose Saving File","","HDF5 Files (*.hdf5)", options=options)
-
+        self.label_pathToData.setText(str(self.save_filename))
         #self.save_filename = QFileDialog.getExistingDirectory(self,"Choose Directory","", options=options)
         if self.save_filename:
             print(self.save_filename)

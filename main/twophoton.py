@@ -111,7 +111,8 @@ if __name__ == '__main__':
     galvos_controller.setPO2Viewer(po2viewer)
 
     galvos_controller.move(150,0)
-    galvos_controller.resize(500,500)
+    galvos_controller.setFixedSize(715,855)
+    
     galvos_controller.show()
 
     

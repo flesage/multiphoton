@@ -386,7 +386,6 @@ class ChannelViewer(Queue.Queue):
                 tmp[:,colIndices]=tmp[:,colIndicesRoll]
                 data[rowIndicesToRoll,:]=tmp
                 data=data.transpose()
-
             self.imv.setImage(-data)
             self.imi=self.imv.getImageItem()
 
