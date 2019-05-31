@@ -374,7 +374,7 @@
         </font>
        </property>
        <property name="currentIndex">
-        <number>5</number>
+        <number>3</number>
        </property>
        <widget class="QWidget" name="tab_3">
         <attribute name="title">
@@ -3053,7 +3053,7 @@
               <item>
                <layout class="QGridLayout" name="gridLayout_12">
                 <item row="2" column="4">
-                 <widget class="QLineEdit" name="lineEdit_2">
+                 <widget class="QLineEdit" name="lineEdit_LS_Length">
                   <property name="enabled">
                    <bool>false</bool>
                   </property>
@@ -3069,7 +3069,7 @@
                  </widget>
                 </item>
                 <item row="6" column="3">
-                 <widget class="QScrollBar" name="horizontalScrollBar_3">
+                 <widget class="QScrollBar" name="horizontalScrollBar_LS_Tolerance">
                   <property name="maximumSize">
                    <size>
                     <width>150</width>
@@ -3082,7 +3082,7 @@
                  </widget>
                 </item>
                 <item row="1" column="3">
-                 <widget class="QScrollBar" name="horizontalScrollBar">
+                 <widget class="QScrollBar" name="horizontalScrollBar_LS_Radius">
                   <property name="maximumSize">
                    <size>
                     <width>150</width>
@@ -3134,7 +3134,7 @@
                  </widget>
                 </item>
                 <item row="1" column="4">
-                 <widget class="QLineEdit" name="lineEdit">
+                 <widget class="QLineEdit" name="lineEdit_LS_Radius">
                   <property name="enabled">
                    <bool>false</bool>
                   </property>
@@ -3157,7 +3157,7 @@
                  </widget>
                 </item>
                 <item row="6" column="4">
-                 <widget class="QLineEdit" name="lineEdit_3">
+                 <widget class="QLineEdit" name="lineEdit_LS_Tolerance">
                   <property name="enabled">
                    <bool>false</bool>
                   </property>
@@ -3168,12 +3168,12 @@
                    </size>
                   </property>
                   <property name="text">
-                   <string>0.1</string>
+                   <string>0.5</string>
                   </property>
                  </widget>
                 </item>
                 <item row="2" column="3">
-                 <widget class="QScrollBar" name="horizontalScrollBar_2">
+                 <widget class="QScrollBar" name="horizontalScrollBar_LS_Length">
                   <property name="maximumSize">
                    <size>
                     <width>150</width>
@@ -3235,7 +3235,7 @@
                  </widget>
                 </item>
                 <item row="1" column="1">
-                 <widget class="QPushButton" name="pushButtonGenerateAutoScans">
+                 <widget class="QPushButton" name="pushButtonGenerateAutoScans_LS_Generate">
                   <property name="maximumSize">
                    <size>
                     <width>100</width>
@@ -3621,9 +3621,6 @@
           </rect>
          </property>
         </widget>
-        <zorder>formLayoutWidget</zorder>
-        <zorder>gridLayoutWidget_2</zorder>
-        <zorder>tableView</zorder>
        </widget>
       </widget>
      </item>

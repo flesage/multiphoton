@@ -15,6 +15,7 @@ from vasc_seg.ScanLines import ScanLines
 import scipy.io as sio
 from PIL import Image
 from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot
+#from matplotlib import pyplot as plt
 
 
 class LineScanROI(pg.graphicsItems.ROI.ROI):
@@ -93,20 +94,23 @@ class ChannelViewer(Queue.Queue):
         self.linescan_not_displayed=0
         self.lineSelected=-1
         self.rectSelected=-1
-        #self.setTestImage()
+        self.setTestImage()
         #self.generateAutoLines()
-        self.displayLogo()
+        #self.displayLogo()
+        
+        
         # display and set on_click callback
         self.shift_display = 0  
         self.displayLines()
-        self.imv.move(1200, windowYPosition)
-        self.imv.resize(650, 450)
+        #self.imv.move(1200, windowYPosition)
+        #self.imv.resize(650, 450)
         self.imv.show()
         self.imi=self.imv.getImageItem()
         self.generatePointFlag=False
         self.lineScanFlag=False
+        
         self.Scene.sigMouseClicked.connect(self.onClick)
-        #self.Scene.sigMouseClicked.connect(self.mouseMoved)
+        self.Scene.sigMouseClicked.connect(self.mouseMoved)
         
     def displayLogo(self):
         logo = np.asarray(Image.open('C:\git-projects\multiphoton\liom_logo.png'))
@@ -205,6 +209,16 @@ class ChannelViewer(Queue.Queue):
         if len(self.lines)>0:
             for line in self.lines:
                 self.imv.addItem(line)
+            
+            #self.imv.move(1200, windowYPosition)
+            #self.imv.resize(650, 450)
+            self.imv.show()
+            #self.imi=self.imv.getImageItem()
+            #self.generatePointFlag=False
+            #self.lineScanFlag=False
+                
+            #self.Scene.sigMouseClicked.connect(self.onClick)
+            #self.Scene.sigMouseClicked.connect(self.mouseMoved)
                 
     def displayRectangles(self):
         if len(self.rect)>0:
@@ -316,27 +330,32 @@ class ChannelViewer(Queue.Queue):
         self.lines.append(LineScanROI([x1, y1], [x2, y2], width=1, pen=pg.mkPen('y',width=3)))
         
     def generateAutoLines(self, 
-                          scales=1, 
+                          scales=3, 
                           diam=10.0, 
                           length=25.0, 
                           tolerance=0.1):
         
-        sl=ScanLines(self.getCurrentImage())
-        print('image shape: '+str(np.shape(self.getCurrentImage())))
+        self.resetLines()
+        image=self.getCurrentImage()
+        image=(image-image.min())/np.max(image-image.min())
+        sl=ScanLines(image*255.0)
+
+
         #binary map
         sl.CalcBinaryMap(scales=scales)
         binmap=sl.GetOutputBinaryMap()
-
+                
         #graphed skeleton
         sl.CalcGraphFromSeg()
         graph=sl.GetOutputGraph()
+        print('Topological graph is created!')
         
         #potential linescans
         sl.CalcLines(diam=diam, length=length, tolerance=tolerance)
         lines=sl.GetOutputLines()
         
-        self.resetLines()
-        
+        self.lines=[]
+                
         for i in lines:
             
             x1=i[1,0]
@@ -345,13 +364,19 @@ class ChannelViewer(Queue.Queue):
             x2=i[0,0]
             y2=i[0,1]
 
-            self.lines.append(LineScanROI([x1, y1], [x2, 2*y1-y2], width=1, pen=pg.mkPen('y',width=3)))
- 
+            self.lines.append(LineScanROI([y1, x1], [y2, 2*x1-x2], width=1, pen=pg.mkPen('y',width=3)))
+            #self.lines.append(LineScanROI([x1, y1], [x2, 2*y1-y2], width=1, pen=pg.mkPen('y',width=3)))
+        
+        print('Scan lines are created!')
   
     def getCurrentImage(self):
-        return np.array(self.imv.image).astype('float')
+    
+        a=np.array(self.imv.image).astype('float')
+        print(a.shape)
         
-    def setTestImage(self, path='C:/git-projects/twophoton/vasc_seg/data/im1.mat'):
+        return a
+        
+    def setTestImage(self, path='C:/Users/LiomW17/Desktop/Rafat_documents/vasc_seg/data/im1.mat'):
         
         raw=sio.loadmat(path)['im']   
         s=250

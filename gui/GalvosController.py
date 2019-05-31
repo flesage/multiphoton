@@ -275,7 +275,55 @@ class GalvosController(QWidget):
         
         self.lineEdit_linerate.setValidator(QIntValidator(0, 260))
 
+        self.horizontalScrollBar_LS_Radius.setMinimum(0)
+        self.horizontalScrollBar_LS_Radius.setPageStep(1)
+        self.horizontalScrollBar_LS_Radius.setMaximum(50.0)
+        self.LS_Radius=float(self.lineEdit_LS_Radius.text())
+
+        self.horizontalScrollBar_LS_Length.setMinimum(0)
+        self.horizontalScrollBar_LS_Length.setPageStep(1)
+        self.horizontalScrollBar_LS_Length.setMaximum(100.0)
+        self.LS_Length=float(self.lineEdit_LS_Length.text())
+
+        self.horizontalScrollBar_LS_Tolerance.setMinimum(0)
+        self.horizontalScrollBar_LS_Tolerance.setPageStep(1)
+        self.horizontalScrollBar_LS_Tolerance.setMaximum(100.0)
+        self.LS_Tolerance=float(self.lineEdit_LS_Tolerance.text())/5
         
+        self.pushButtonGenerateAutoScans_LS_Generate.clicked.connect(self.generateAutoLines)
+        self.horizontalScrollBar_LS_Radius.valueChanged.connect(self.set_LS_Radius)
+        self.horizontalScrollBar_LS_Length.valueChanged.connect(self.set_LS_Length)
+        self.horizontalScrollBar_LS_Tolerance.valueChanged.connect(self.set_LS_Tolerance)
+        
+
+    #autolineScans:
+    def generateAutoLines(self):
+
+        self.viewer.generateAutoLines(diam=self.LS_Radius, 
+                                      length=self.LS_Length, 
+                                      tolerance=self.LS_Tolerance)
+        self.viewer.displayLines()
+        
+        
+    def set_LS_Radius(self):
+        self.LS_Radius=float(self.horizontalScrollBar_LS_Radius.value())
+        self.lineEdit_LS_Radius.setText(str(self.LS_Radius))
+
+    def set_LS_Length(self):
+        self.LS_Length=float(self.horizontalScrollBar_LS_Length.value())
+        self.lineEdit_LS_Length.setText(str(self.LS_Length))
+        
+    def set_LS_Tolerance(self):
+        
+        def valueHandler(value):   
+            return float(value)/500
+
+        self.LS_Tolerance=valueHandler(self.horizontalScrollBar_LS_Tolerance.value())
+        self.lineEdit_LS_Tolerance.setText(str(self.LS_Tolerance*5))
+
+
+            
+            
     #Wheel 3P:
     def toggle3PWheel(self):
         if (self.enableWheelFlag==0):

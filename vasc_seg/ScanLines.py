@@ -159,7 +159,7 @@ class ScanLines:
         return
 
     def __GetGraphFromSeg(self):
-        
+        print('Generating a graph ...')
         if self.__BinaryMap is not None:
             
             binmap=itk.GetArrayFromImage(self.__BinaryMap) 
@@ -170,12 +170,13 @@ class ScanLines:
             G=GraphContraction(label=label)
             G.generateGraph()
             G.contractGraph(speed_param=.1, #[low_speed, high_speed]
-                             dis_param=1,
+                             dis_param=.1,
                              deg_param=0,
                              med_param=1,
                              thr=5,
                              n_iter=10,
                              stop_thr=.01)  
+            
             G.refineGraph(diam_refine=5)
             graph=G.G_refined  
       
@@ -218,17 +219,33 @@ class ScanLines:
                 
             # get graph segments
             components=list(nx.connected_components(graph))
-            components=[i for i in components if len(i)> seg_len]       
-            segments=[[i for i in j if len(graph.neighbors(i))==1] for j in components]        
+            components=[i for i in components if len(i)> seg_len]
+             
+            segments=[[i for i in j if len(graph.neighbors(i))==1] for j in components] 
+            segments=[i for i in segments if len(i)==2] # ensure line-like segments
+            
+            print('Number of segments after tolerance constraint: '+ str(len(segments)))      
+            if len(segments)==0:
+                return
+            
             segments=np.array(segments)
             
             # remove segments with big diam
             segmentsToRecall=[]
             for idx, i in enumerate(segments):
-                if graph.node[i[0]]['d']<diam and graph.node[i[1]]['d']<diam:
-                    segmentsToRecall.append(idx)            
+                try:
+                    if graph.node[i[0]]['d']<diam and graph.node[i[1]]['d']<diam:
+                        segmentsToRecall.append(idx)    
+                except:
+                    print('Error in graph segment :'+str(i))    
+                    pass
+
             segments=segments[segmentsToRecall,:]
-       
+            
+            print('Number of segments after radius constraint: '+ str(len(segments)))      
+            if len(segments)==0:
+                return
+            
             lines=[[np.array(graph.node[j]['pos']) for j in i] for i in segments]  
             lines=np.array(lines)
             
@@ -243,6 +260,10 @@ class ScanLines:
             LinesReduced=np.swapaxes(LinesReduced,0,1)
             lines[IndLinesToReduce]=LinesReduced
        
+            print('Number of segments after length constraint: ', len(lines))      
+            if len(segments)==0:
+                return
+            
             self.__Lines=lines
             
         
