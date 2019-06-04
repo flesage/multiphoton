@@ -175,6 +175,7 @@ class GalvosController(QWidget):
         self.pushButton_get_line_position.clicked.connect(self.update_linescan)
         self.lineEdit_nt.textChanged.connect(self.update_linescan)
         self.lineEdit_linerate_LS.textChanged.connect(self.update_linescan)
+        self.pushButton_deleteAllLines.clicked.connect(self.deleteAllLines)
         self.pushButton_snap_angio.setEnabled(False)        
         self.pushButton_start_linescan.setEnabled(True)
         self.pushButton_stop_linescan.setEnabled(False)
@@ -192,7 +193,8 @@ class GalvosController(QWidget):
         self.pushButton_stop_linescan.clicked.connect(self.stoplinescan)   
         self.previewScanFlag = False
         self.linescan_shift_display=0
-        
+        self.diameterFlag=False
+        self.checkBox_diameter.stateChanged.connect(self.updateDiameterFlag)         
         # PO2 acquisition
         self.po2_x_positions = None
         self.po2_y_positions = None
@@ -274,6 +276,8 @@ class GalvosController(QWidget):
         self.tabWidget.setCurrentIndex(1)  
         
         self.lineEdit_linerate.setValidator(QIntValidator(0, 260))
+        
+        self.pushButton_fixLength.clicked.connect(self.fixLengthLines)
 
         self.horizontalScrollBar_LS_Radius.setMinimum(0)
         self.horizontalScrollBar_LS_Radius.setPageStep(1)
@@ -555,6 +559,14 @@ class GalvosController(QWidget):
         self.po2viewer.showPlot()
     #MULTIPLE LINE FUNCTIONS:
     
+    def updateDiameterFlag(self):
+        self.diameterFlag=self.checkBox_diameter.isChecked()
+    
+    def fixLengthLines(self):
+        self.diameterFlag=self.checkBox_diameter.isChecked()
+        length=float(self.lineEdit_fixedLength.text())
+        self.viewer.forceLength(length,self.diameterFlag)
+    
     def addLines(self):
         self.viewer.addLines()
         self.updateNumberOfLines()
@@ -562,6 +574,9 @@ class GalvosController(QWidget):
     def removeSelectedLine(self):
         self.viewer.removeSelectedLine()
         self.updateNumberOfLines()
+        
+    def deleteAllLines(self):
+        self.viewer.removeAllLines()
         
     def removeLastLine(self):
         self.viewer.removeLastLine()
