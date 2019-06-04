@@ -194,7 +194,9 @@ class GalvosController(QWidget):
         self.previewScanFlag = False
         self.linescan_shift_display=0
         self.diameterFlag=False
-        self.checkBox_diameter.stateChanged.connect(self.updateDiameterFlag)         
+        self.toggleDiameterFlag=True
+        self.pushButton_addOrthogonalLines.clicked.connect(self.toggleDiameter)
+            
         # PO2 acquisition
         self.po2_x_positions = None
         self.po2_y_positions = None
@@ -559,14 +561,33 @@ class GalvosController(QWidget):
         self.po2viewer.showPlot()
     #MULTIPLE LINE FUNCTIONS:
     
-    def updateDiameterFlag(self):
-        self.diameterFlag=self.checkBox_diameter.isChecked()
-    
+    def toggleDiameter(self):
+        
+        self.numberOfLines=len(self.viewer.lines)
+        
+        if self.numberOfLines == 0:
+            print('no lines!')
+            self.toggleDiameterFlag=True
+            self.pushButton_addOrthogonalLines.setText('Add ortho.')            
+        else:
+        
+            if self.toggleDiameterFlag:
+                self.viewer.generateOrthogonalLines()
+                self.updateNumberOfLines()
+                self.toggleDiameterFlag=False
+                self.pushButton_addOrthogonalLines.setText('Remove ortho.')
+            else:
+                self.viewer.removeOrthogonalLines()
+                self.updateNumberOfLines()
+                self.toggleDiameterFlag=True
+                self.pushButton_addOrthogonalLines.setText('Add ortho.')
+
+
+
     def fixLengthLines(self):
-        self.diameterFlag=self.checkBox_diameter.isChecked()
         length=float(self.lineEdit_fixedLength.text())
-        self.viewer.forceLength(length,self.diameterFlag)
-    
+        self.viewer.forceLength(length)
+        
     def addLines(self):
         self.viewer.addLines()
         self.updateNumberOfLines()
@@ -577,6 +598,10 @@ class GalvosController(QWidget):
         
     def deleteAllLines(self):
         self.viewer.removeAllLines()
+        if not self.toggleDiameterFlag:
+            self.pushButton_addOrthogonalLines.setText('Add ortho.')
+            self.toggleDiameterFlag=True            
+        self.updateNumberOfLines()
         
     def removeLastLine(self):
         self.viewer.removeLastLine()
@@ -607,6 +632,8 @@ class GalvosController(QWidget):
         else:
             self.pushButtonStartMultipleLineAcq.setEnabled(False)
             self.pushButtonShowLines.setEnabled(False)
+            
+            
         
     #POWER CURVE:    
         

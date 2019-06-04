@@ -108,7 +108,7 @@ class ChannelViewer(Queue.Queue):
         self.imi=self.imv.getImageItem()
         self.generatePointFlag=False
         self.lineScanFlag=False
-        
+        self.orthogonalLines=False
         self.Scene.sigMouseClicked.connect(self.onClick)
         #self.Scene.sigMouseClicked.connect(self.mouseMoved)
         
@@ -305,16 +305,22 @@ class ChannelViewer(Queue.Queue):
             print('not enough points to delete')
 
     def removeSelectedLine(self):
+        flagOrthogonal=self.orthogonalLines
         self.resetLines()
-        counter=0
-        selLine=-1
+        indexToDelete=self.lines.index(self.lineSelected)
         if len(self.lines)>0:
-            for line in self.lines:
-                    if line==self.lineSelected:
-                        selLine=counter
-                        if selLine!=-1:
-                            del self.lines[selLine] 
-                    counter=counter+1
+            if flagOrthogonal:
+                
+                if np.isin(indexToDelete, self.indicesOrthogonalLines):
+                    linestodelete=[indexToDelete-1,indexToDelete]
+                else:
+                    linestodelete=[indexToDelete,indexToDelete+1]
+                linestodelete.reverse()
+                for i in linestodelete:
+                    del self.lines[i]
+                
+            else:
+                del self.lines[indexToDelete]
                            
             self.displayLines()
         else:
@@ -348,38 +354,73 @@ class ChannelViewer(Queue.Queue):
         
         x_center=x_e+length/2*math.cos(alpha_e)
         y_center=y_e+length/2*math.sin(alpha_e)
+       
+        return x_center, y_center, alpha_e, length
         
-        print('x_e;y_e;angle')
-        print(x_e)
-        print(y_e)
-        print(alpha_e)
-        print('x_center;y_center')
-        print(x_center)
-        print(y_center)        
-        return x_center, y_center, alpha_e
-        
-    def forceLength(self,length,diameter_flag):
-        self.resetLines()
+    def forceLength(self,length):
+        flagOrthogonal=self.orthogonalLines
+        if flagOrthogonal:
+            self.removeOrthogonalLines()
         counter=0
-
         numberOfLines=len(self.lines)
         x_e=np.zeros(numberOfLines)
         y_e=np.zeros(numberOfLines)
         alpha_e=np.zeros(numberOfLines)
-        
+        self.indicesOrthogonalLines=np.zeros(numberOfLines)
         if numberOfLines>0:
             for counter in range(numberOfLines):
-                x_e[counter], y_e[counter], alpha_e[counter]=self.getAngleAndCenterSelectedLinePosition(0)
-                del self.lines[0]                
+                x_e[counter], y_e[counter], alpha_e[counter],tmp=self.getAngleAndCenterSelectedLinePosition(counter)
             self.displayLines()
-            self.resetLines()
+            self.removeAllLines()
             for i in range(numberOfLines):
                 self.generateLineFixedLength(x_e[i], y_e[i], alpha_e[i],length)
-                if diameter_flag:
-                    self.generateLineFixedLength(x_e[i], y_e[i], alpha_e[i]+math.pi/2,length)
             self.displayLines()
         else:
             print('not enough lines to delete')
+        if flagOrthogonal:
+            self.generateOrthogonalLines()
+        
+            
+    def generateOrthogonalLines(self):
+        self.orthogonalLines=True
+        self.resetLines()
+        counter=0
+        numberOfLines=len(self.lines)
+        x_e=np.zeros(numberOfLines)
+        y_e=np.zeros(numberOfLines)
+        lengthVector=np.zeros(numberOfLines)
+        alpha_e=np.zeros(numberOfLines)
+        self.indicesOrthogonalLines=np.zeros(numberOfLines)
+        if numberOfLines>0:
+            for counter in range(numberOfLines):
+                x_e[counter], y_e[counter], alpha_e[counter], lengthVector[counter]=self.getAngleAndCenterSelectedLinePosition(0)
+                del self.lines[0]                
+            self.displayLines()
+            self.resetLines()
+            counterOrtho=0
+            for i in range(numberOfLines):
+                self.generateLineFixedLength(x_e[i], y_e[i], alpha_e[i],lengthVector[i])
+                self.generateLineFixedLength(x_e[i], y_e[i], alpha_e[i]+math.pi/2,lengthVector[i])
+                counterOrtho=counterOrtho+1
+            self.displayLines()
+            self.indicesOrthogonalLines=np.arange(1,numberOfLines*2,2)
+        else:
+            print('not enough lines to delete')
+            
+    def removeOrthogonalLines(self):
+        self.orthogonalLines=False
+        self.resetLines()
+        numberOfLines=len(self.lines)
+        indicesToReview=range(numberOfLines)
+        indicesToReview.reverse()
+        if numberOfLines>0:
+            for counter in indicesToReview:
+                if counter in self.indicesOrthogonalLines:
+                    del self.lines[counter]             
+            self.displayLines()
+        else:
+            print('not enough lines to delete')
+        self.indicesOrthogonalLines=[]
         
         
     def generateLineFixedLength(self,x_center,y_center,angleLine,length):
