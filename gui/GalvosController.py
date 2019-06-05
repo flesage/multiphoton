@@ -22,7 +22,7 @@ from base.Maitai import Maitai
 
 from base import liomio
 from base.liomacq import OnDemandVoltageOutTask
-from base.po2Acq import PO2Acq
+from base.po2Acq import PO2Acq, PO2GatedAcq
 import numpy as np
 import icons_rc
 from base.liomio import DataSaver
@@ -70,8 +70,8 @@ class GalvosController(QWidget):
         self.shutter3ph_closed = True                      
         self.pushButton_shutter_2ph.clicked.connect(self.toggle_shutter2ph)
         self.pushButton_shutter_3ph.clicked.connect(self.toggle_shutter3ph)
-        self.pushButton_shutter_2ph.setStyleSheet("background-color: pale gray");
-        self.pushButton_shutter_3ph.setStyleSheet("background-color: pale gray");
+        self.pushButton_shutter_2ph.setStyleSheet("background-color: pale gray")
+        self.pushButton_shutter_3ph.setStyleSheet("background-color: pale gray")
 
         self.maitaiFlag=0
         self.checkBoxMaiTai.clicked.connect(self.toggle_maitai_control)
@@ -89,19 +89,19 @@ class GalvosController(QWidget):
         self.pushButton_maitai.clicked.connect(self.toggle_maitai)
         self.maitaiShutter_closed = True        
         self.pushButton_maitaiShutter.clicked.connect(self.toggle_maitaiShutter)
-        self.pushButton_maitai.setStyleSheet("background-color: pale gray");
-        self.pushButton_maitaiShutter.setStyleSheet("background-color: pale gray");
+        self.pushButton_maitai.setStyleSheet("background-color: pale gray")
+        self.pushButton_maitaiShutter.setStyleSheet("background-color: pale gray")
         self.pushButton_maitaiShutter.setEnabled(False)
         self.pushButton_maitaiReadPower.clicked.connect(self.readPower_maitai)
-        self.pushButton_maitaiReadPower.setStyleSheet("background-color: pale gray");   
+        self.pushButton_maitaiReadPower.setStyleSheet("background-color: pale gray")
         self.pushButton_maitaiReadPower.setEnabled(False)  
         self.pushButton_maitaiReadWavelength.clicked.connect(self.readWavelength_maitai)
-        self.pushButton_maitaiReadWavelength.setStyleSheet("background-color: pale gray");
+        self.pushButton_maitaiReadWavelength.setStyleSheet("background-color: pale gray")
         self.pushButton_maitaiReadWavelength.setEnabled(False)
         self.pushButton_maitaiSetWavelength.clicked.connect(self.setWavelength_maitai)
-        self.pushButton_maitaiSetWavelength.setStyleSheet("background-color: pale gray");
+        self.pushButton_maitaiSetWavelength.setStyleSheet("background-color: pale gray")
         self.pushButton_maitaiSetWavelength.setEnabled(False)
-        self.pushButton_maitaiCheckStatus.setStyleSheet("background-color: pale gray");
+        self.pushButton_maitaiCheckStatus.setStyleSheet("background-color: pale gray")
         self.pushButton_maitaiCheckStatus.clicked.connect(self.readStatus_maitai)
         self.pushButton_maitaiCheckStatus.setEnabled(False)
         self.pushButton_maitaiML.setEnabled(False)
@@ -171,7 +171,7 @@ class GalvosController(QWidget):
         self.stackNumber=0
         
         #Line scan acquistion:
-        self.toggleLineFlag=0;
+        self.toggleLineFlag=0
         self.pushButton_get_line_position.clicked.connect(self.update_linescan)
         self.lineEdit_nt.textChanged.connect(self.update_linescan)
         self.lineEdit_linerate_LS.textChanged.connect(self.update_linescan)
@@ -201,6 +201,11 @@ class GalvosController(QWidget):
         self.po2_x_positions = None
         self.po2_y_positions = None
         self.pushButton_startPO2.clicked.connect(self.start_po2_scan)
+        self.pushButton_stopPO2.clicked.connect(self.stop_po2_scan)
+
+        self.pushButton_start_3p_po2_scan.clicked.connect(self.start_3p_po2_scan)
+        self.pushButton_stop_3p_po2_scan.clicked.connect(self.stop_po2_scan)
+
         self.pushButton_po2AddPoint.clicked.connect(self.po2_add_point)
         
         #Channel 1 - 2: display
@@ -466,7 +471,7 @@ class GalvosController(QWidget):
         
         power2ph=self.horizontalScrollBar_power2ph.value()
         self.toggle_shutter2ph()
-        print('Start po2 acquisition:')
+        print('Starting po2 acquisition:')
         # Fermer EOM manuel
         try:
             self.power_ao_eom.ClearTask()
@@ -482,40 +487,99 @@ class GalvosController(QWidget):
         voltage_on = 2.0*power2ph/100.0
         n_averages = int(self.lineEdit_n_po2_averages.text())
         
-        eom_task = PO2Acq(config.eom_device, config.eom_ao, gate_on, gate_off, voltage_on, n_averages)
-        eom_task.setSynchronizedAITask(self.ai_task)
-        eom_task.config()
+        self.eom_task = PO2Acq(config.eom_device, config.eom_ao, gate_on, gate_off, voltage_on, n_averages)
+        self.eom_task.setSynchronizedAITask(self.ai_task)
+        self.eom_task.config()
         # Acquire list of points to move to
         self.galvos.configOnDemand()
         self.ai_task.setDecoder(None)
         self.ai_task.setDataConsumer(self.po2viewer,True,0,'po2plot',True)
 
-        # Loop over points and:
-        for i in range(self.po2_x_positions.shape[0]):
-            
-            print('po2 measurements: ' + str(i+1) + ' out of ' + str(self.po2_x_positions.shape[0]))
-            self.galvos.moveOnDemand(self.po2_x_positions[i], self.po2_y_positions[i])
-            print('galvos moved...')
-            eom_task.start()
-            # One second seems too much if you want to go faster
-            time.sleep(1)
-            print(str(self.po2_x_positions[i])+';'+str(self.po2_y_positions[i]))
-            self.po2viewer.update()
+        # Loop over points by using the aoDoneSignal, start the first point manually
+        self.i_po2_point = -1
+        self.eom_task.ao_po2.signal_helper.aoDoneSignal.connect(self.nextPO2Point)
+        self.nextPO2Point()
 
-        #    Start acquisition task averaging doing a finite ao task reapeated n average times
-        #    Show in a plot the Decay curve
-        self.toggle_shutter2ph()
-        eom_task.close()
-        self.galvos.ao_task.StopTask()
-        self.galvos.ao_task.ClearTask()
-        self.ai_task.setDecoder(self.galvos)
-        #self.viewer.removeAllPoints()
-        # Remettre EOM Manuel
-        self.power_ao_eom = OnDemandVoltageOutTask(config.eom_device, config.eom_ao, 'Power2Ph')
-        print('po2 acquisition done!')
-        self.ai_task.updateConsumerFlag('viewer',True)        
-        self.ai_task.removeDataConsumer(self.po2viewer)
-        timer.stop()
+  
+    def stop_po2_scan(self):
+        # Finish current point but stop after
+        self.i_po2_point = self.po2_x_positions.shape[0]
+
+    @pyqtSlot()       
+    def nextPO2Point(self):
+        self.i_po2_point = self.i_po2_point+1
+        if(self.i_po2_point < self.po2_x_positions.shape[0]):
+            #    Start acquisition task averaging doing a finite ao task reapeated n average times
+            #    Show in a plot the Decay curve
+            #   Should remove these prints once we know it works. No need to update viewer anymore
+            print('PO2 measurement: ' + str(self.i_po2_point+1) + ' out of ' + str(self.po2_x_positions.shape[0]))
+            print(str(self.po2_x_positions[self.i_po2_point])+';'+str(self.po2_y_positions[self.i_po2_point]))
+            self.galvos.moveOnDemand(self.po2_x_positions[self.i_po2_point], self.po2_y_positions[self.i_po2_point])
+            self.eom_task.start()
+        else:
+            self.toggle_shutter2ph()
+            self.eom_task.close()
+            self.galvos.ao_task.StopTask()
+            self.galvos.ao_task.ClearTask()
+            self.ai_task.setDecoder(self.galvos)
+            #self.viewer.removeAllPoints()
+            # Remettre EOM Manuel
+            self.power_ao_eom = OnDemandVoltageOutTask(config.eom_device, config.eom_ao, 'Power2Ph')
+            print('po2 acquisition done!')
+            self.ai_task.updateConsumerFlag('viewer',True)        
+            self.ai_task.removeDataConsumer(self.po2viewer)
+
+    def start_3p_po2_scan(self):
+        self.convertPosToVolts()
+        self.showPO2Viewer()
+        self.ai_task.updateConsumerFlag('viewer',False)        
+        
+        power3ph=self.horizontalScrollBar_power3ph.value()
+        self.toggle_shutter3ph()
+        # Here we want to block until the power is reached since we need all curves to be taken with the same 
+        # power
+        self.setPower3ph_noThread(power3ph)
+        print('Starting 3P po2 acquisition:')
+
+        # Steps
+        gate_on = float(self.lineEdit_po2_gate_on.text())
+        gate_off = float(self.lineEdit_po2_gate_off.text())
+        n_averages = int(self.lineEdit_n_po2_averages.text())
+        voltage_on = 0.4
+
+        self.galvo_gate_task = PO2GatedAcq(config.gated_device, config.gated_ao, gate_on, gate_off, voltage_on, n_averages)
+        self.galvo_gate_task.setSynchronizedAITask(self.ai_task)
+        self.galvo_gate_task.config()
+        # Acquire list of points to move to
+        self.galvos.configOnDemand()
+        self.ai_task.setDecoder(None)
+        self.ai_task.setDataConsumer(self.po2viewer,True,0,'po2plot',True)
+
+        # Loop over points by using the aoDoneSignal, start the first point manually
+        self.i_po2_point = -1
+        self.galvo_gate_task.ao_po2.signal_helper.aoDoneSignal.connect(self.next3PPO2Point)
+        self.next3PPO2Point()
+
+    @pyqtSlot()       
+    def next3PPO2Point(self):
+        self.i_po2_point = self.i_po2_point+1
+        if(self.i_po2_point < self.po2_x_positions.shape[0]):
+            #    Start acquisition task averaging doing a finite ao task reapeated n average times
+            #    Show in a plot the Decay curve
+            #   Should remove these prints once we know it works. No need to update viewer anymore
+            print('PO2 measurement: ' + str(self.i_po2_point+1) + ' out of ' + str(self.po2_x_positions.shape[0]))
+            print(str(self.po2_x_positions[self.i_po2_point])+';'+str(self.po2_y_positions[self.i_po2_point]))
+            self.galvos.moveOnDemand(self.po2_x_positions[self.i_po2_point], self.po2_y_positions[self.i_po2_point])
+            self.galvo_gate_task.start()
+        else:
+            self.toggle_shutter3ph()
+            self.galvo_gate_task.close()
+            self.galvos.ao_task.StopTask()
+            self.galvos.ao_task.ClearTask()
+            self.ai_task.setDecoder(self.galvos)
+            print('po2 acquisition done!')
+            self.ai_task.updateConsumerFlag('viewer',True)        
+            self.ai_task.removeDataConsumer(self.po2viewer)
 
     #PREVIEW VALUES
     def changeDisplayValues(self):
@@ -890,7 +954,7 @@ class GalvosController(QWidget):
         
     def toggle_maitai(self):
         if self.maitai_off:
-            print 'Turning laser on...'
+            print ('Turning laser on...')
             self.maitai.OpenLaser()
             warmup_response=self.maitai.WarmedUp()
             warmup_str = "Warmup status:" + warmup_response
@@ -912,7 +976,7 @@ class GalvosController(QWidget):
             self.pushButton_maitaiCheckStatus.setEnabled(True)
                      
         else:
-            print 'Turning laser off...'
+            print ('Turning laser off...')
             self.maitai.CloseLaser() 
             self.maitai_off = True
             self.pushButton_maitai.setStyleSheet("background-color: pale gray");
@@ -927,26 +991,26 @@ class GalvosController(QWidget):
                 
     def toggle_maitaiShutter(self):
         if self.maitaiShutter_closed:
-            print 'Laser shutter open...'
+            print ('Laser shutter open...')
             self.maitai.SHUTTERopen()
             self.maitaiShutter_closed = False
             self.pushButton_maitaiShutter.setStyleSheet("background-color: red");
             self.pushButton_maitaiShutter.setText('Maitai Shutter: OPEN')
         else:
-            print 'Laser shutter closed...'
+            print ('Laser shutter closed...')
             self.maitai.SHUTTERshut() 
             self.maitaiShutter_closed = True
             self.pushButton_maitaiShutter.setStyleSheet("background-color: pale gray");
             self.pushButton_maitaiShutter.setText('Maitai Shutter: Closed')  
             
     def readPower_maitai(self):
-        print 'Reading laser power...'
+        print ('Reading laser power...')
         powerMaitai = self.maitai.ReadPower()
         powerMaitai = str(round(float(powerMaitai[0:-2])*100.0)/100.0)
         self.lineEdit_laserResponse.setText("laser power: "+powerMaitai+"W")
         
     def checkPowerStatus_maitai(self):
-        print 'Checking laser status...'
+        print ('Checking laser status...')
         powerMaitai = self.maitai.ReadPower()
         powerMaitai = powerMaitai[0:-2]
         powerMaitai = str(round(float(powerMaitai)*100.0)/100.0)
@@ -961,10 +1025,10 @@ class GalvosController(QWidget):
                     
     def readCurrent_maitai(self):
         currentMaitai = self.maitai.ReadCurrent()
-        print 'Laser diode current: ' + currentMaitai +' %'
+        print ('Laser diode current: ' + currentMaitai +' %')
 
     def readStatus_maitai(self):
-        print 'Reading laser status...'
+        print ('Reading laser status...')
         statusMaitai = self.maitai.ReadStatus()
         self.lineEdit_laserResponse.setText("laser status: "+statusMaitai)   
         if(int(statusMaitai)==13):
@@ -975,18 +1039,18 @@ class GalvosController(QWidget):
             self.pushButton_maitaiML.setStyleSheet("background-color: pale gray"); 
         
     def readWavelength_maitai(self):
-        print 'Reading laser wavelength...'
+        print ('Reading laser wavelength...')
         wavelengthMaitai = self.maitai.ReadWavelength()
         self.lineEdit_laserResponse.setText("laser wavelength: " + wavelengthMaitai) 
         
     def setWavelength_maitai(self):
         wavelength_command = self.lineEdit_wavelength.text()
-        print 'Setting laser wavelength... ' + wavelength_command +' nm'
+        print ('Setting laser wavelength... ' + wavelength_command +' nm')
         wavelengthMaitai=self.maitai.ChangeWavelength(int(wavelength_command))
-        print wavelengthMaitai
+        print (wavelengthMaitai)
         while (wavelengthMaitai[0:-3]!=wavelength_command):
             wavelengthMaitai = self.maitai.ReadWavelength()
-        print 'wavelength set!'
+        print ('wavelength set!')
         
     def setShutter2Ph(self,shutter):
         self.shutter2ph = shutter   
@@ -1089,10 +1153,10 @@ class GalvosController(QWidget):
         self.gotoMaximumPower3ph_nothread()
 
     def wheel_run(self,command):
-        print "Starting rotation:"
+        print ("Starting rotation:")
         self.thorlabs.setpos(command)
         self.flagWheel = 1
-        print "Wheel rotation done!"
+        print ("Wheel rotation done!")
         
 #FUNCTIONS SETTING CLASSES:
         
@@ -1124,7 +1188,7 @@ class GalvosController(QWidget):
         #calib = 7*math.pi/45
         calib = 23*math.pi/45
         deg=float((45/math.pi)*(math.asin(2*percent/100-1)+math.pi/2+calib))
-        print self.lineEdit_laser_power1.text()
+        print (self.lineEdit_laser_power1.text())
         self.power_motor.goTo_abs(1, deg)
         
     def set_power2(self): 
@@ -1132,7 +1196,7 @@ class GalvosController(QWidget):
         #calib = 7*math.pi/45
         calib = 40*math.pi/45
         deg=float((45/math.pi)*(math.asin(2*percent/100-1)+math.pi/2+calib))
-        print self.lineEdit_laser_power2.text()
+        print (self.lineEdit_laser_power2.text())
         self.power_motor.goTo_abs(2, deg)
  
 #FUNCTIONS MOTORS:
@@ -1244,19 +1308,19 @@ class GalvosController(QWidget):
         fig.show()
         
     def set_brain_pos_reset(self):       
-        print 'set_brain_pos: in function'
+        print ('set_brain_pos: in function')
         self.brain_pos=self.motors.get_pos(3)
         print(self.brain_pos)
-        print 'set_brain_pos: done'
+        print ('set_brain_pos: done')
         self.pushButton_goto_brain.setEnabled(True)    
         self.lineEdit_brain_pos.setText(self.brain_pos)
         self.brainPosSetFlag = 0
         
     def set_brain_pos(self):       
-        print 'set_brain_pos: in function'
+        print ('set_brain_pos: in function')
         self.brain_pos=self.motors.get_pos(3)
         print(self.brain_pos)
-        print 'set_brain_pos: done'
+        print ('set_brain_pos: done')
         self.pushButton_goto_brain.setEnabled(True)    
         self.lineEdit_brain_pos.setText(self.brain_pos)
         self.brainPosSetFlag = 1
@@ -1269,26 +1333,26 @@ class GalvosController(QWidget):
             self.currentZPos=float(self.brain_pos)-float(self.abs_pos)
             self.lineEdit_currentZpos.setText(str(self.currentZPos))
         else:
-            print 'brain position not set yet!'
+            print ('brain position not set yet!')
                 
     def set_xy_center(self):       
-        print 'set_x_center: in function'
+        print ('set_x_center: in function')
         self.center_x=self.motors.get_pos(1)
         print(self.center_x)
-        print 'set_x_center: done'
-        print 'set_y_center: in function'
+        print ('set_x_center: done')
+        print ('set_y_center: in function')
         self.center_y=self.motors.get_pos(2)
         print(self.center_y)
-        print 'set_y_center: done'    
+        print ('set_y_center: done'  )  
         self.pushButton_center.setEnabled(True)    
            
     def goto_brain_pos(self):       
-        print 'goto_brain_pos: in function'
+        print ('goto_brain_pos: in function')
         #self.actual_pos=self.motors.get_pos_axial()
         #commandPos=float(self.brain_pos)-float(self.actual_pos)
         self.motors.move_az(self.brain_pos)
         self.get_current_z_depth()
-        print 'goto_brain_pos: done'    
+        print ('goto_brain_pos: done' )   
 
 #FUNCTIONS SCANNING:
         
@@ -1660,16 +1724,16 @@ class GalvosController(QWidget):
 
             self.galvos_stopped = False
             self.progressBar_stack.setValue(k/n_steps*100)
-            print k
+            print (k)
                        
             print('scanning started')   
             self.make_connection(self.galvos.ao_task.signal_helper.aoDoneSignal)         
             self.galvos.startTask()    
         
-            print 'scan started'
+            print ('scan started')
             self.motors.move_dz(-self.zstep/1000)
             
-            print 'motor moved'
+            print ('motor moved')
             time.sleep(1)
             if self.stopped:
                 break
@@ -1738,20 +1802,20 @@ class GalvosController(QWidget):
         self.galvos_stopped = False
         #SET SAVING PART:
         if self.checkBox_enable_save.isChecked():
-            print 'setting saving'
+            print ('setting saving')
             self.data_saver=DataSaver(self.save_filename)
             self.mouseName=self.lineEdit_mouse_name.text()
             self.scanType = 'snapshot'      
             self.pathRoot = posixpath.join('/',self.mouseName,self.scanDate,self.scanType)
             
             self.stackNumber = self.data_saver.checkAlreadyExistingFiles(self.pathRoot,self.scanType)
-            print 'data checked'
+            print ('data checked')
             self.lineScanNumber = self.data_saver.checkAlreadyExistingFiles(self.pathRoot,self.scanType)
             self.lineEdit_linescan_acq.setText(str(self.lineScanNumber))
             self.scanNumber = self.scanType+'_'+str(self.lineScanNumber) 
             self.pathName = posixpath.join(self.pathRoot,self.scanNumber)
-            print 'setting name:'
-            print self.pathName            
+            print ('setting name:')
+            print (self.pathName )          
             self.data_saver.setDatasetName(self.pathName)       
             self.data_saver.addAttribute('nx',nx)
             self.data_saver.addAttribute('ny',ny)
@@ -1761,14 +1825,14 @@ class GalvosController(QWidget):
             self.data_saver.addAttribute('line_rate',line_rate)   
             self.data_saver.addAttribute('scantype',self.comboBox_scantype.currentText())  
             self.data_saver.setBlockSize(512)
-            print 'setting consumers'
+            print ('setting consumers')
             self.ai_task.setDataConsumer(self.data_saver,True,0,'save',True)
             self.ai_task.setDataConsumer(self.data_saver,True,1,'save',True)
-            print 'starting saving'
+            print ('starting saving')
             self.data_saver.startSaving()
         #        print 'making connection'
         self.make_connection_snapshot(self.galvos.ao_task.signal_helper.aoDoneSignal)
-        print 'starting task'       
+        print ('starting task')
         self.galvos.startTask()
     
     @pyqtSlot()
@@ -2059,19 +2123,19 @@ class GalvosController(QWidget):
         self.galvos_stopped = False
         #SET SAVING PART:
         if self.checkBox_enable_save.isChecked():
-            print 'setting saving'
+            print ('setting saving')
             self.data_saver=DataSaver(self.save_filename)
             self.mouseName=self.lineEdit_mouse_name.text()
-            self.scanType = 'Stack'      
+            self.scanType = ('Stack')   
             self.pathRoot = posixpath.join('/',self.mouseName,self.scanDate,self.scanType)
             
             self.stackNumber = self.data_saver.checkAlreadyExistingFiles(self.pathRoot,self.scanType)
-            print 'data checked'
+            print ('data checked')
             self.lineEdit_stack_acq.setText(str(self.stackNumber))
             self.scanNumber = self.scanType+'_'+str(self.stackNumber) 
             self.pathName = posixpath.join(self.pathRoot,self.scanNumber)
-            print 'setting name:'
-            print self.pathName            
+            print ('setting name:')
+            print (self.pathName)         
             self.data_saver.setDatasetName(self.pathName)       
             self.data_saver.addAttribute('nx',nx)
             self.data_saver.addAttribute('ny',ny)
@@ -2084,10 +2148,10 @@ class GalvosController(QWidget):
             self.data_saver.addAttribute('n_steps',self.n_steps)  
             self.data_saver.addAttribute('zstep',self.zstep)              
             self.data_saver.setBlockSize(512)
-            print 'setting consumers'
+            print ('setting consumers')
             self.ai_task.setDataConsumer(self.data_saver,True,0,'save',True)
             self.ai_task.setDataConsumer(self.data_saver,True,1,'save',True)
-            print 'starting saving'
+            print ('starting saving')
             self.get_current_z_depth()
             self.lineEdit_current_depth.setText(str(self.currentZPos))
             self.lineEdit_current_depth_3P.setText(str(self.currentZPos))
@@ -2095,7 +2159,7 @@ class GalvosController(QWidget):
             self.data_saver.startSaving()
         #
         self.set_iteration_number(0)
-        print 'making connection'
+        print ('making connection')
         self.make_connection(self.galvos.ao_task.signal_helper.aoDoneSignal)
         
         if self.checkBoxPowerCurve.isChecked():
@@ -2112,7 +2176,7 @@ class GalvosController(QWidget):
             txt= str(round(currentPowerValue,1)) + '%'
             self.lineEdit_current_power_3P.setText(txt)
         
-        print 'starting task'                    
+        print ('starting task')                 
         self.galvos.startTask()    
     
     def stop_stack(self):
@@ -2249,17 +2313,17 @@ class GalvosController(QWidget):
         delta_xy=float(self.lineEdit_xy_motor_step.text())     
         self.motors.move_dx(-delta_xy/1000)
     def move_center(self):
-        print 'goto_x_center: in function'
+        print ('goto_x_center: in function')
         self.motors.move_ax(self.center_x)
-        print 'goto_x_center: done'
-        print 'goto_y_center: in function'
+        print ('goto_x_center: done')
+        print ('goto_y_center: in function')
         self.motors.move_ay(self.center_y)
-        print 'goto_y_center: done'    
+        print ('goto_y_center: done')    
 
     def move_z_up(self):       
         delta_z=float(self.lineEdit_z_motor_step.text())
         self.motors.move_dz(delta_z/1000)
-        print 'move done'
+        print ('move done')
         self.get_current_z_depth()
         
     def go_to_pos_axial(self):
@@ -2296,7 +2360,7 @@ class GalvosController(QWidget):
         self.zaber.goTo(posY)
         
     def initialisation(self):
-        print 'going home'
+        print ('going home')
         self.thorlabs.goHome()
         self.zaber.goHome()
         self.motors.home()
@@ -2322,12 +2386,12 @@ class GalvosController(QWidget):
         
         self.percent= self.percent/ (0.83**n) # .80 trop bas # .85 trop haut
         
-        print 'self.percentactual', self.percent
+        print ('self.percentactual', self.percent)
 
         try:
             self.posrotationaryexpected = float((45./math.pi)*(math.asin(2.*(self.percent)/100.-1.)+math.pi/2.+23.*math.pi/45.))
         except:
-            print 'going to 99%'
+            print ('going to 99%')
             self.exception = True
             
         if self.posrotationaryexpected  < float((45./math.pi)*(math.asin(2.*(self.pourcentmax)/100.-1.)+math.pi/2.+23.*math.pi/45.)):
@@ -2337,7 +2401,7 @@ class GalvosController(QWidget):
         elif self.exception:
             deg=float((45./math.pi)*(math.asin(2.*99./100.-1.)+math.pi/2.+23.*math.pi/45.))
             self.power_motor.goTo_abs(1, deg)
-            print 'laser maxed out at 99'
+            print ('laser maxed out at 99')
             self.exception = False
             
         
@@ -2350,7 +2414,7 @@ class GalvosController(QWidget):
     def change_wavelength(self):
         wavelength = str(self.lineEdit_laser_output.text())
         self.laser.ChangeWavelength(wavelength)
-        print 'Wavelength changed to : ', wavelength ,'nm' 
+        print ('Wavelength changed to : ', wavelength ,'nm' )
         
                 
     def read_power_laser(self):

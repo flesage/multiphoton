@@ -93,6 +93,9 @@ if __name__ == '__main__':
     timer2 = pg.QtCore.QTimer()
     timer2.timeout.connect(viewer2.update)
     timer2.start(100)
+    timer3 = pg.QtCore.QTimer()
+    timer3.timeout.connect(po2viewer.update)
+    timer3.start(100)
     
     # Start the gui controlling the galvos
     galvos_controller = GalvosController()
@@ -129,7 +132,7 @@ if __name__ == '__main__':
     
     timer.stop()
     timer2.stop()    
+    timer3.stop()
     #galvos_controller.turnOffWheel3P()
     galvos_controller.kill3PWheel()
     galvos_controller.closeLaser()
-    print 'killing GUI'

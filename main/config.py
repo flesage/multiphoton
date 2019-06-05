@@ -19,6 +19,9 @@ galvos_aoy = 'ao1'
 eom_ao = 'ao2'
 eom_device = '/Dev3'
 
+gated_ao = 'ao3'
+gated_device = '/Dev3'
+
 pmt_device = '/Dev3'
 pmt = 'ai0:1'
 

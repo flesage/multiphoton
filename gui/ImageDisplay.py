@@ -119,7 +119,7 @@ class ChannelViewer(Queue.Queue):
         self.imv.setImage(logo) 
         
     def mouseMoved(self,pos):
-        print "Image position:", self.imi.mapToView(pos)
+        print ("Image position:", self.imi.mapToView(pos))
         
     def updateGeneratePointFlag(self,flag):
         self.generatePointFlag=flag
@@ -129,7 +129,7 @@ class ChannelViewer(Queue.Queue):
         items=self.Scene.items(event.scenePos())
         if (self.generatePointFlag):
             if event.button()==1:
-                print 'generating point'
+                print ('generating point')
                 self.createPoint(posMouse.x(), posMouse.y())
             elif event.button()==2:
                 for i in items:
@@ -204,7 +204,7 @@ class ChannelViewer(Queue.Queue):
         numPoints=len(self.points)
         pointsToDelete=np.linspace(numPoints-number,numPoints-1,number)
         pointsToDelete=np.flip(pointsToDelete)
-        print pointsToDelete
+        print (pointsToDelete)
         for i in pointsToDelete:
             print(i)
             del self.points[int(i)]
