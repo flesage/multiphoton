@@ -65,19 +65,19 @@ class PO2Acq(object):
             self.eom_data,byref(read),None)
         
         # wait until write is completeled
-        isDone = False
-        isDoneP = c_ulong()
-        while not isDone:
-            self.po2_task.IsTaskDone(byref(isDoneP))
-            isDone = isDoneP.value != 0
+        #isDone = False
+        #isDoneP = c_ulong()
+        #while not isDone:
+        #    self.po2_task.IsTaskDone(byref(isDoneP))
+        #    isDone = isDoneP.value != 0
         
-        print('stopping eom...')
-        self.po2_task.StopTask()
-        print('eom stopped!')
+        #print('stopping eom...')
+        #self.po2_task.StopTask()
+        #print('eom stopped!')
 
-        print('stopping ai')
-        self.ai_task.stopTask()
-        print('ai stopped')
+        #print('stopping ai')
+        #self.ai_task.stopTask()
+        #print('ai stopped')
 
     def close(self):
         if self.ai_task is not None:
@@ -136,19 +136,19 @@ class PO2GatedAcq(object):
             self.gated_data,byref(read),None)
         
         # wait until write is completeled
-        isDone = False
-        isDoneP = c_ulong()
-        while not isDone:
-            self.po2_task.IsTaskDone(byref(isDoneP))
-            isDone = isDoneP.value != 0
+        #isDone = False
+        #isDoneP = c_ulong()
+        #while not isDone:
+        #    self.po2_task.IsTaskDone(byref(isDoneP))
+        #    isDone = isDoneP.value != 0
         
-        print('stopping eom...')
-        self.po2_task.StopTask()
-        print('eom stopped!')
+        #print('stopping eom...')
+        #self.po2_task.StopTask()
+        #print('eom stopped!')
 
-        print('stopping ai')
-        self.ai_task.stopTask()
-        print('ai stopped')
+        #print('stopping ai')
+        #self.ai_task.stopTask()
+        #print('ai stopped')
 
     def close(self):
         if self.ai_task is not None:
