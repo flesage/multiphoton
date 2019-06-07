@@ -9,10 +9,31 @@ from PyDAQmx import Task
 from PyDAQmx.DAQmxTypes import *
 from PyDAQmx.DAQmxConstants import *
 import numpy as np
+from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot
+from PyQt5 import QtCore
+
+class SignalHelper(QObject):
+    aoDoneSignal = pyqtSignal()
+ 
+    def __init__(self):
+        QObject.__init__(self)
+        
+    def on_ao_done(self):
+        self.aoDoneSignal.emit()    
 
 class VoltageOutTask(Task):
     def __init__(self):
         Task.__init__(self)
+        
+    def createSignalHelper(self):
+        print('signal helper created!')
+        self.signal_helper = SignalHelper()            
+        
+    def DoneCallback(self,status):
+        self.StopTask()
+        self.signal_helper.on_ao_done()
+
+        return 0 # The function should return an integer 
 
 class PO2Acq(object):
     '''
@@ -43,8 +64,11 @@ class PO2Acq(object):
         
         
         self.po2_task = VoltageOutTask()
+        self.po2_task.createSignalHelper()
         self.po2_task.CreateAOVoltageChan(posixpath.join(self.device,self.ao_po2),"PO2",-10.0,10.0,DAQmx_Val_Volts,None)
         self.po2_task.CfgSampClkTiming("",freq,DAQmx_Val_Rising,DAQmx_Val_FiniteSamps,int(self.n_pts*self.n_average))
+        self.po2_task.AutoRegisterDoneEvent(0)
+
         if self.ai_task is not None:
             print('config start trigger')
             self.ai_task.config(int(self.n_pts*self.n_average),freq,finite=True)
@@ -53,17 +77,18 @@ class PO2Acq(object):
     def setSynchronizedAITask(self, ai_task):
         self.ai_task = ai_task
         
+    def writeOnce(self):
+        read = int32()
+        self.po2_task.WriteAnalogF64(self.n_pts*self.n_average,False,-1,DAQmx_Val_GroupByChannel,
+            self.eom_data,byref(read),None)        
         
     def start(self):
         print('starting eom...')
         if self.ai_task is not None:
             print('starting ai')
             self.ai_task.startTask()
-        read = int32()
         # Task is started by Write which will trigger Ai task
-        self.po2_task.WriteAnalogF64(self.n_pts*self.n_average,True,-1,DAQmx_Val_GroupByChannel,
-            self.eom_data,byref(read),None)
-        
+        self.po2_task.StartTask()
         # wait until write is completeled
         #isDone = False
         #isDoneP = c_ulong()
@@ -80,8 +105,8 @@ class PO2Acq(object):
         #print('ai stopped')
 
     def close(self):
-        if self.ai_task is not None:
-            self.ai_task.clearTask()
+        #if self.ai_task is not None:
+        #    self.ai_task.clearTask()
 
         self.po2_task.StopTask()
         self.po2_task.ClearTask()

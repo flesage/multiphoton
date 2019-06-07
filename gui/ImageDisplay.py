@@ -57,15 +57,21 @@ class po2Viewer(Queue.Queue):
         self.po2plot.resize(650, 450)
         self.po2plot.move(1200, 500)
         
+    def getAcquisitionParameters(self,numAverages):
+        self.numAverages=numAverages
+        
     def showPlot(self):
         self.po2plot.show()
         
     def update(self):
         try:
-            print('getting data...')
+            #print('getting data...')
             data = self.get(False)
             #averageDecayCurve=np.mean(data,2)
             #x=np.linspace(0,data/(1e6),data.shape[0])
+            data=np.reshape(data, (-1,self.numAverages))
+            print(data.shape)
+            data=np.mean(data,1)
             self.po2plot.plot(data)
             print('data plotted!')
             #- pour direct

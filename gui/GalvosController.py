@@ -486,7 +486,7 @@ class GalvosController(QWidget):
         gate_off = float(self.lineEdit_po2_gate_off.text())
         voltage_on = 2.0*power2ph/100.0
         n_averages = int(self.lineEdit_n_po2_averages.text())
-        
+        self.po2viewer.getAcquisitionParameters(n_averages)
         self.eom_task = PO2Acq(config.eom_device, config.eom_ao, gate_on, gate_off, voltage_on, n_averages)
         self.eom_task.setSynchronizedAITask(self.ai_task)
         self.eom_task.config()
@@ -497,7 +497,7 @@ class GalvosController(QWidget):
 
         # Loop over points by using the aoDoneSignal, start the first point manually
         self.i_po2_point = -1
-        self.eom_task.ao_po2.signal_helper.aoDoneSignal.connect(self.nextPO2Point)
+        self.eom_task.po2_task.signal_helper.aoDoneSignal.connect(self.nextPO2Point)
         self.nextPO2Point()
 
   
@@ -507,6 +507,7 @@ class GalvosController(QWidget):
 
     @pyqtSlot()       
     def nextPO2Point(self):
+        print('in next point!')
         self.i_po2_point = self.i_po2_point+1
         if(self.i_po2_point < self.po2_x_positions.shape[0]):
             #    Start acquisition task averaging doing a finite ao task reapeated n average times
@@ -515,6 +516,7 @@ class GalvosController(QWidget):
             print('PO2 measurement: ' + str(self.i_po2_point+1) + ' out of ' + str(self.po2_x_positions.shape[0]))
             print(str(self.po2_x_positions[self.i_po2_point])+';'+str(self.po2_y_positions[self.i_po2_point]))
             self.galvos.moveOnDemand(self.po2_x_positions[self.i_po2_point], self.po2_y_positions[self.i_po2_point])
+            self.eom_task.writeOnce()
             self.eom_task.start()
         else:
             self.toggle_shutter2ph()
