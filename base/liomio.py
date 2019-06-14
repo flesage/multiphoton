@@ -100,9 +100,16 @@ def save_process(queue,block_size,datasetname,conn,filename):
             # running this while loop for no reason
             data = queue.get(True,1)
             # Create data buffer
-            if index == 0:
-                buf=np.zeros((data.shape[0],data.shape[1],block_size),dtype='int16')
-            buf[:,:,index]=data
+            print(data.ndim)
+            
+            if data.ndim>1:
+                if index == 0:
+                    buf=np.zeros((data.shape[0],data.shape[1],block_size),dtype='int16')
+                buf[:,:,index]=data
+            else:
+                if index == 0:
+                    buf=np.zeros((data.shape[0],block_size),dtype='int16')
+                buf[:,index]=data
             index = (index + 1) % block_size
             print(index)
             if index == 0:
@@ -118,8 +125,12 @@ def save_process(queue,block_size,datasetname,conn,filename):
             # Reloop
             pass
     # Save last acquisition if incomplete (duplicate if exactly complete?)
-    buf2=np.zeros((data.shape[0],data.shape[1],index+1),dtype='int16')
-    buf2=buf[:,:,0:index];
+    if data.ndim>1:
+        buf2=np.zeros((data.shape[0],data.shape[1],index+1),dtype='int16')
+        buf2=buf[:,:,0:index];
+    else:
+        buf2=np.zeros((data.shape[0],index+1),dtype='int16')
+        buf2=buf[:,0:index];        
     f[posixpath.join('/scans',datasetname,'scan'+u'%05d' % save_index)]=buf2
     f.close()
 

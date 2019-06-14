@@ -63,6 +63,9 @@ class po2Viewer(Queue.Queue):
     def showPlot(self):
         self.po2plot.show()
         
+    def clearPlot(self):
+        self.po2plot.clear()
+        
     def update(self):
         try:
             #print('getting data...')

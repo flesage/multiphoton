@@ -5,7 +5,7 @@ Created on Mon Aug 31 10:48:31 2015
 @author: flesage
 """
 import pyqtgraph as pg
-
+import datetime
 from datetime import date
 import time
 import math
@@ -437,7 +437,6 @@ class GalvosController(QWidget):
         self.width=float(self.lineEdit_width.text())
         self.height=float(self.lineEdit_height.text())
          
-
         [self.x_pos,self.y_pos]=self.viewer.getPositionPoints()
         counter=0
         lengthx = len(self.x_pos)
@@ -494,6 +493,8 @@ class GalvosController(QWidget):
         self.galvos.configOnDemand()
         self.ai_task.setDecoder(None)
         self.ai_task.setDataConsumer(self.po2viewer,True,0,'po2plot',True)
+        #
+        self.get_current_z_depth()
 
         # Loop over points by using the aoDoneSignal, start the first point manually
         self.i_po2_point = -1
@@ -515,6 +516,34 @@ class GalvosController(QWidget):
             #   Should remove these prints once we know it works. No need to update viewer anymore
             print('PO2 measurement: ' + str(self.i_po2_point+1) + ' out of ' + str(self.po2_x_positions.shape[0]))
             print(str(self.po2_x_positions[self.i_po2_point])+';'+str(self.po2_y_positions[self.i_po2_point]))
+            #
+
+            if self.checkBox_enable_save.isChecked():
+                if(self.i_po2_point>0):
+                    print('stop saving...')
+                    self.data_saver.stopSaving()
+                    self.ai_task.removeDataConsumer(self.data_saver)
+                
+                print('in save...')
+                self.data_saver=DataSaver(self.save_filename)
+                self.mouseName=self.lineEdit_mouse_name.text()
+                self.scanType = 'po2plot'      
+                self.pathRoot = posixpath.join('/',self.mouseName,self.scanDate,self.scanType)
+                self.po2PlotNumber = self.data_saver.checkAlreadyExistingFiles(self.pathRoot,self.scanType)
+                self.lineEdit_po2plot_acq.setText(str(self.po2PlotNumber))
+                self.scanNumber = self.scanType+'_'+str(self.po2PlotNumber) 
+                self.pathName = posixpath.join(self.pathRoot,self.scanNumber)
+                self.data_saver.setDatasetName(self.pathName) 
+                self.data_saver.addAttribute('meas num:',self.i_po2_point+1)  
+                self.data_saver.addAttribute('total meas num:',self.po2_x_positions.shape[0])  
+                self.data_saver.addAttribute('x_pos',self.po2_x_positions[self.i_po2_point])            
+                self.data_saver.addAttribute('y_pos',self.po2_y_positions[self.i_po2_point])              
+                self.data_saver.addAttribute('depth',self.currentZPos)
+                self.data_saver.setBlockSize(512)          
+                self.ai_task.setDataConsumer(self.data_saver,True,0,'save',True)
+                self.ai_task.setDataConsumer(self.data_saver,True,1,'save',True)
+                self.data_saver.startSaving()
+            #
             self.galvos.moveOnDemand(self.po2_x_positions[self.i_po2_point], self.po2_y_positions[self.i_po2_point])
             self.eom_task.writeOnce()
             self.eom_task.start()
@@ -523,6 +552,12 @@ class GalvosController(QWidget):
             self.eom_task.close()
             self.galvos.ao_task.StopTask()
             self.galvos.ao_task.ClearTask()
+            if self.checkBox_enable_save.isChecked():
+                print('stop saving...')
+                self.data_saver.stopSaving()
+                self.ai_task.removeDataConsumer(self.data_saver)
+                #self.data_saver.setBlockSize(512)
+                print('stop saving done!')
             self.ai_task.setDecoder(self.galvos)
             #self.viewer.removeAllPoints()
             # Remettre EOM Manuel
@@ -625,6 +660,8 @@ class GalvosController(QWidget):
         
     def showPO2Viewer(self):
         self.po2viewer.showPlot()
+        self.po2viewer.clearPlot()
+
     #MULTIPLE LINE FUNCTIONS:
     
     def toggleDiameter(self):
@@ -765,7 +802,18 @@ class GalvosController(QWidget):
         scatter = pg.ScatterPlotItem(pen=pg.mkPen(width=5, color='r'), symbol='o', size=1)
         self.TwoPplot.addItem(scatter)
         scatter.setData(self.positionVector,self.powerVector)
-
+        
+    def updatePowerCurve(self,currentPosition,currentPowerValue):
+        self.TwoPplot.clear()
+        self.TwoPplot.plot(self.depthVector, self.powerCurve)
+        #self.TwoPplot.setData(self.positionVector,self.powerVector)#,pen=None, symbol='o', symbolPen=None, symbolSize=4, symbolBrush=('r'))
+        scatter = pg.ScatterPlotItem(pen=pg.mkPen(width=5, color='r'), symbol='o', size=1)
+        self.TwoPplot.addItem(scatter)
+        scatter.setData(self.positionVector,self.powerVector)
+        scatter2 = pg.ScatterPlotItem(pen=pg.mkPen(width=5, color='y'), symbol='o', size=1)
+        self.TwoPplot.addItem(scatter2)
+        scatter2.setData(np.array([currentPosition]),np.array([currentPowerValue]))        
+        self.TwoPplot.show()
         
         #fig, ax = plt.subplots()        
         #self.generatePowerCurve()
@@ -1504,6 +1552,7 @@ class GalvosController(QWidget):
             
         
     def startlinescan(self):
+        self.update_linescan()
         x_0_px, y_0_px, x_e_px, y_e_px, linescan_length_px = self.viewer.getMouseSelectedLinePosition()
         self.viewer.setLineScanFlag(True)
         self.viewer2.setLineScanFlag(True)
@@ -1736,7 +1785,6 @@ class GalvosController(QWidget):
             self.motors.move_dz(-self.zstep/1000)
             
             print ('motor moved')
-            time.sleep(1)
             if self.stopped:
                 break
         self.goto_brain_pos()
@@ -2113,6 +2161,8 @@ class GalvosController(QWidget):
         # Step two: Start stack loop
         self.zstep=float(self.lineEdit_zstep.text())
         self.n_steps = int(self.lineEdit_nstack.text())
+        self.currentPositionStack=0
+
         # Take 2D image and saving
         # Set ramp
         self.powerIt=0;
@@ -2190,6 +2240,7 @@ class GalvosController(QWidget):
     @pyqtSlot()
     def nextAcq(self):
         print('in nextAcq')
+        print("start: "+str(datetime.datetime.now().time()))
         self.iteration_number=self.get_iteration_number()
         progVal=self.iteration_number*100/self.n_steps+1
         self.progressBar_stack.setValue(progVal)        
@@ -2203,14 +2254,14 @@ class GalvosController(QWidget):
         stepVal=(self.n_steps*self.averagingVal)-1
         iterationCond=(self.iteration_number < stepVal)
         galvo_on=not(self.galvos_stopped)
-        print(self.iteration_number)
         if (iterationCond & galvo_on):
             if ((((self.iteration_number) % self.averagingVal)==0) & (self.iteration_number>0)):
-                print('moving motors')
+                print('--- moving motors')
                 self.motors.move_dz(-self.zstep/1000)
-                print('done!')
+                print('--- done!')
+                self.currentZPos=self.currentZPos+self.zstep/1000
                 self.powerIt=self.powerIt+1;
-                print('power number: ' + str(self.powerIt))
+                print('--- power number: ' + str(self.powerIt))
                 if self.checkBoxPowerCurve.isChecked():
                     currentPowerValue=self.powerCurve[self.powerIt]
                     print('2P: power value: ' + str(round(currentPowerValue,1)) + '%')
@@ -2219,6 +2270,8 @@ class GalvosController(QWidget):
                         self.horizontalScrollBar_power2ph.setValue(currentPowerValue)
                         txt= str(round(currentPowerValue,1)) + '%'
                         self.lineEdit_current_power.setText(txt)
+                        self.currentPositionStack=self.currentPositionStack+self.zstep
+                        self.updatePowerCurve(self.currentZPos,round(currentPowerValue,1))
                 if self.checkBoxPowerCurve3P.isChecked():
                     currentPowerValue3P=self.powerCurve3P[self.powerIt]
                     print('3P: power value: ' + str(round(currentPowerValue3P,1)) + '%')
@@ -2227,7 +2280,8 @@ class GalvosController(QWidget):
                         self.horizontalScrollBar_power3ph.setValue(currentPowerValue3P)
                         txt= str(round(currentPowerValue3P,1)) + '%'
                         self.lineEdit_current_power_3P.setText(txt)
-            time.sleep(2)
+            #time.sleep(2)
+            print("step 1: "+str(datetime.datetime.now().time()))
             nx=int(self.lineEdit_nx.text())    
             ny=int(self.lineEdit_ny.text())   
             n_extra=int(self.lineEdit_extrapoints.text())                     
@@ -2240,11 +2294,12 @@ class GalvosController(QWidget):
                 self.galvos.setTriangularRamp(self.center_x-width/2,self.center_y-height/2,self.center_x+width/2,self.center_y+height/2,nx,ny,n_extra,1,line_rate)
             elif self.comboBox_scantype.currentText() == 'Line':          
                 self.galvos.setLineRamp(self.center_x-width/2,self.center_y-height/2,self.center_x+width/2,self.center_y+height/2,nx,ny,n_extra,line_rate)    
-            self.get_current_z_depth()
             self.lineEdit_current_depth.setText(str(self.currentZPos))
             self.lineEdit_current_depth_3P.setText(str(self.currentZPos))
-            self.make_connection(self.galvos.ao_task.signal_helper.aoDoneSignal)                
+            self.make_connection(self.galvos.ao_task.signal_helper.aoDoneSignal)   
+            print("step 2: "+str(datetime.datetime.now().time()))
             self.galvos.startTask()
+            print("step 3: "+str(datetime.datetime.now().time()))
         else:
             print('acquisition finished!')
             self.shutter2ph_closed=False

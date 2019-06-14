@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1029</width>
-    <height>871</height>
+    <width>715</width>
+    <height>889</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -374,7 +374,7 @@
         </font>
        </property>
        <property name="currentIndex">
-        <number>4</number>
+        <number>2</number>
        </property>
        <widget class="QWidget" name="tab_3">
         <attribute name="title">
@@ -385,7 +385,7 @@
           <rect>
            <x>21</x>
            <y>10</y>
-           <width>421</width>
+           <width>411</width>
            <height>421</height>
           </rect>
          </property>
@@ -2214,8 +2214,8 @@
           <rect>
            <x>21</x>
            <y>10</y>
-           <width>426</width>
-           <height>650</height>
+           <width>422</width>
+           <height>644</height>
           </rect>
          </property>
          <layout class="QVBoxLayout" name="verticalLayout_11">
@@ -3431,7 +3431,7 @@
            <x>21</x>
            <y>10</y>
            <width>411</width>
-           <height>361</height>
+           <height>374</height>
           </rect>
          </property>
          <layout class="QVBoxLayout" name="verticalLayout_12">
@@ -3632,6 +3632,9 @@
               <property name="text">
                <string>3000</string>
               </property>
+              <property name="alignment">
+               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+              </property>
              </widget>
             </item>
             <item row="1" column="0">
@@ -3651,6 +3654,9 @@
               </property>
               <property name="text">
                <string>25</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
               </property>
              </widget>
             </item>
@@ -3672,6 +3678,9 @@
               <property name="text">
                <string>275</string>
               </property>
+              <property name="alignment">
+               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+              </property>
              </widget>
             </item>
            </layout>
@@ -3682,13 +3691,13 @@
              <widget class="QPushButton" name="pushButton_startPO2">
               <property name="minimumSize">
                <size>
-                <width>150</width>
+                <width>100</width>
                 <height>0</height>
                </size>
               </property>
               <property name="maximumSize">
                <size>
-                <width>300</width>
+                <width>200</width>
                 <height>16777215</height>
                </size>
               </property>
@@ -3705,13 +3714,13 @@
              <widget class="QPushButton" name="pushButton_stopPO2">
               <property name="minimumSize">
                <size>
-                <width>150</width>
+                <width>100</width>
                 <height>0</height>
                </size>
               </property>
               <property name="maximumSize">
                <size>
-                <width>300</width>
+                <width>200</width>
                 <height>16777215</height>
                </size>
               </property>
@@ -3730,15 +3739,47 @@
            <layout class="QHBoxLayout" name="horizontalLayout_24">
             <item>
              <widget class="QPushButton" name="pushButton_start_3p_po2_scan">
+              <property name="minimumSize">
+               <size>
+                <width>100</width>
+                <height>0</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>200</width>
+                <height>16777215</height>
+               </size>
+              </property>
               <property name="text">
                <string>Start 3P PO2 Scan</string>
+              </property>
+              <property name="icon">
+               <iconset resource="icons.qrc">
+                <normaloff>:/icons/img/start_icon.png</normaloff>:/icons/img/start_icon.png</iconset>
               </property>
              </widget>
             </item>
             <item>
              <widget class="QPushButton" name="pushButton_stop_3p_po2_scan">
+              <property name="minimumSize">
+               <size>
+                <width>100</width>
+                <height>0</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>200</width>
+                <height>16777215</height>
+               </size>
+              </property>
               <property name="text">
                <string>Stop 3P PO2 Scan</string>
+              </property>
+              <property name="icon">
+               <iconset resource="icons.qrc">
+                <normaloff>:/icons/img/stop_icon.png</normaloff>:/icons/img/stop_icon.png</iconset>
               </property>
              </widget>
             </item>
@@ -4866,6 +4907,38 @@
           <widget class="Line" name="line_33">
            <property name="orientation">
             <enum>Qt::Horizontal</enum>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="0">
+          <widget class="QLabel" name="label_63">
+           <property name="text">
+            <string>PO2 Acq. #:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="1">
+          <widget class="QLineEdit" name="lineEdit_po2plot_acq">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="minimumSize">
+            <size>
+             <width>80</width>
+             <height>0</height>
+            </size>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>80</width>
+             <height>16777215</height>
+            </size>
+           </property>
+           <property name="text">
+            <string>0</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
            </property>
           </widget>
          </item>
