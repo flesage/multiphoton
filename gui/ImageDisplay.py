@@ -335,6 +335,39 @@ class ChannelViewer(Queue.Queue):
         else:
             print('not enough lines to delete')
             
+    def shiftLines(self,shiftX,shiftY):
+        numberOfLines=len(self.lines)
+        x_0=np.zeros(numberOfLines)
+        y_0=np.zeros(numberOfLines)
+        x_1=np.zeros(numberOfLines)
+        y_1=np.zeros(numberOfLines)
+                
+        vec=np.arange(numberOfLines)
+        vec=np.flip(vec)
+        counter=0
+        if numberOfLines>0:
+            for i in vec:
+                x_e, y_e=self.lines[i].pos()
+                length,width=self.lines[i].size()
+                alpha_e=self.lines[i].angle()*math.pi/180
+                x_0[i]=x_e-width/2*math.sin(alpha_e)+shiftX
+                y_0[i]=y_e+width/2*math.cos(alpha_e)+shiftY
+                delta_x= length * math.cos(alpha_e)
+                delta_y= length * math.sin(alpha_e)
+                x_1[i]=x_0[i]+delta_x
+                y_1[i]=y_0[i]+delta_y
+            self.removeAllLines()
+            print(self.lines)
+            self.lines=[]
+            self.displayLines()
+            for i in vec:
+                self.lines.append(LineScanROI([x_1[counter], y_1[counter]], [x_0[counter], 2*y_1[counter]-y_0[counter]], width=1, pen=pg.mkPen('y',width=7)))
+                counter=counter+1
+            self.displayLines()
+        else:
+            print('not enough lines to delete')
+
+        
     def generateRandomLine(self):
         x1=random.uniform(1, 256)
         y1=random.uniform(1, 256)
@@ -439,6 +472,8 @@ class ChannelViewer(Queue.Queue):
         y2=y_center-math.sin(angleLine)*length/2;
         self.lines.append(LineScanROI([x2, y2], [x1, 2*y2-y1], width=1, pen=pg.mkPen('y',width=7)))
 
+
+
         
     def generateAutoLines(self, 
                           scales=3, 
@@ -475,7 +510,13 @@ class ChannelViewer(Queue.Queue):
             x2=i[0,0]
             y2=i[0,1]
 
-            self.lines.append(LineScanROI([y1, x1], [y2, 2*x1-x2], width=1, pen=pg.mkPen('y',width=7)))
+            cond1=x1>20
+            cond2=x2>20
+            cond3=x1<512
+            cond4=x2<512
+
+            if (cond1 and cond2 and cond3 and cond4):
+                self.lines.append(LineScanROI([y1, x1], [y2, 2*x1-x2], width=1, pen=pg.mkPen('y',width=7)))
             #self.lines.append(LineScanROI([x1, y1], [x2, 2*y1-y2], width=1, pen=pg.mkPen('y',width=3)))
         
         print('Scan lines are created!')

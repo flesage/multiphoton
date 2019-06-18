@@ -176,10 +176,8 @@ class GalvosController(QWidget):
         self.lineEdit_nt.textChanged.connect(self.update_linescan)
         self.lineEdit_linerate_LS.textChanged.connect(self.update_linescan)
         self.pushButton_deleteAllLines.clicked.connect(self.deleteAllLines)
-        self.pushButton_snap_angio.setEnabled(False)        
         self.pushButton_start_linescan.setEnabled(True)
         self.pushButton_stop_linescan.setEnabled(False)
-        self.pushButton_snap_angio.clicked.connect(self.take_snapshot)
         self.horizontalScrollBar_line_scan_shift_y.setValue(-20)
         self.horizontalScrollBar_line_scan_shift_x.setValue(0)
         self.horizontalScrollBar_line_scan_shift_display.setValue(106)
@@ -306,9 +304,52 @@ class GalvosController(QWidget):
         self.horizontalScrollBar_LS_Length.valueChanged.connect(self.set_LS_Length)
         self.horizontalScrollBar_LS_Tolerance.valueChanged.connect(self.set_LS_Tolerance)
         
+        self.pushButton_start_stack.setEnabled(False)
+
+        #move linescans
+        self.pushButton_LS_up.setEnabled(False)
+        self.pushButton_LS_down.setEnabled(False)
+        self.pushButton_LS_left.setEnabled(False)
+        self.pushButton_LS_right.setEnabled(False)
+        self.pushButton_LS_up.clicked.connect(self.move_LS_up)
+        self.pushButton_LS_down.clicked.connect(self.move_LS_down)
+        self.pushButton_LS_left.clicked.connect(self.move_LS_left)
+        self.pushButton_LS_right.clicked.connect(self.move_LS_right)
 
     #autolineScans:
+    def enableMoveButtons(self,val):
+        self.pushButton_LS_up.setEnabled(val)
+        self.pushButton_LS_down.setEnabled(val)
+        self.pushButton_LS_left.setEnabled(val)
+        self.pushButton_LS_right.setEnabled(val)  
+        
+    def move_LS_up(self):
+        step=float(self.lineEdit_LS_shift.text())
+        print(step)
+        self.viewer.shiftLines(0,-step)
+        print('moving line up')
+        
+    def move_LS_down(self):
+        step=float(self.lineEdit_LS_shift.text())
+        self.viewer.shiftLines(0,step)
+        print('moving line down')
+        print(step)
+
+    def move_LS_left(self):
+        step=float(self.lineEdit_LS_shift.text())
+        self.viewer.shiftLines(-step,0)
+        print('moving line left')
+        print(step)
+      
+    def move_LS_right(self):
+        step=float(self.lineEdit_LS_shift.text())
+        self.viewer.shiftLines(step,0)
+        print('moving line right')
+        print(step)
+
+        
     def generateAutoLines(self):
+        print(self.LS_Tolerance)
 
         self.viewer.generateAutoLines(diam=self.LS_Radius, 
                                       length=self.LS_Length, 
@@ -331,7 +372,7 @@ class GalvosController(QWidget):
 
         self.LS_Tolerance=valueHandler(self.horizontalScrollBar_LS_Tolerance.value())
         self.lineEdit_LS_Tolerance.setText(str(self.LS_Tolerance*5))
-
+        print(self.LS_Tolerance)
 
             
             
@@ -469,7 +510,6 @@ class GalvosController(QWidget):
         self.ai_task.updateConsumerFlag('viewer',False)        
         
         power2ph=self.horizontalScrollBar_power2ph.value()
-        self.toggle_shutter2ph()
         print('Starting po2 acquisition:')
         # Fermer EOM manuel
         try:
@@ -508,6 +548,11 @@ class GalvosController(QWidget):
 
     @pyqtSlot()       
     def nextPO2Point(self):
+        self.shutter2ph.off() 
+        self.shutter2ph_closed = True
+        time.sleep(1)
+        self.pushButton_shutter_2ph.setStyleSheet("background-color: pale gray");
+        self.pushButton_shutter_2ph.setText('Shutter 2Ph: Closed')        
         print('in next point!')
         self.i_po2_point = self.i_po2_point+1
         if(self.i_po2_point < self.po2_x_positions.shape[0]):
@@ -545,10 +590,15 @@ class GalvosController(QWidget):
                 self.data_saver.startSaving()
             #
             self.galvos.moveOnDemand(self.po2_x_positions[self.i_po2_point], self.po2_y_positions[self.i_po2_point])
+            self.toggle_shutter2ph()
             self.eom_task.writeOnce()
             self.eom_task.start()
         else:
-            self.toggle_shutter2ph()
+            self.shutter2ph.off() 
+            self.shutter2ph_closed = True
+            time.sleep(1)
+            self.pushButton_shutter_2ph.setStyleSheet("background-color: pale gray");
+            self.pushButton_shutter_2ph.setText('Shutter 2Ph: Closed') 
             self.eom_task.close()
             self.galvos.ao_task.StopTask()
             self.galvos.ao_task.ClearTask()
@@ -694,10 +744,14 @@ class GalvosController(QWidget):
     def addLines(self):
         self.viewer.addLines()
         self.updateNumberOfLines()
+        if self.numberOfLines>0:
+            self.enableMoveButtons(True)
 
     def removeSelectedLine(self):
         self.viewer.removeSelectedLine()
         self.updateNumberOfLines()
+        if self.numberOfLines<1:
+            self.enableMoveButtons(False)
         
     def deleteAllLines(self):
         self.viewer.removeAllLines()
@@ -902,7 +956,6 @@ class GalvosController(QWidget):
             self.pushButton_start.setEnabled(val)
                         
         val = (val == False)
-        self.pushButton_snap_angio.setEnabled(val)        
         self.pushButton_start_linescan.setEnabled(val)
         self.pushButton_get_line_position.setEnabled(val)
             
@@ -1365,6 +1418,7 @@ class GalvosController(QWidget):
         self.pushButton_goto_brain.setEnabled(True)    
         self.lineEdit_brain_pos.setText(self.brain_pos)
         self.brainPosSetFlag = 0
+        self.pushButton_start_stack.setText('Set brain pos. first!')
         
     def set_brain_pos(self):       
         print ('set_brain_pos: in function')
@@ -1376,6 +1430,8 @@ class GalvosController(QWidget):
         self.brainPosSetFlag = 1
         self.pushButton_add_power_val.setEnabled(True)
         self.pushButton_add_power_val_3P.setEnabled(True)
+        self.pushButton_start_stack.setEnabled(True)
+        self.pushButton_start_stack.setText('Start Stack')
         
     def get_current_z_depth(self):
         if self.brainPosSetFlag==1:
@@ -2242,11 +2298,12 @@ class GalvosController(QWidget):
         print('in nextAcq')
         print("start: "+str(datetime.datetime.now().time()))
         self.iteration_number=self.get_iteration_number()
-        progVal=self.iteration_number*100/self.n_steps+1
+        self.averagingVal = int(self.lineEdit_averaging.text())
+        
+        progVal=self.iteration_number*100/(self.n_steps*self.averagingVal)+1
         self.progressBar_stack.setValue(progVal)        
         self.galvos.stopTask()    
         self.set_iteration_number(self.iteration_number+1) 
-        self.averagingVal = int(self.lineEdit_averaging.text())
          
         self.lineEditSliceUnderAcq.setText(str(self.iteration_number/self.averagingVal))  
         self.lineEdit_AvgNumber.setText(str(((self.iteration_number) % self.averagingVal)+1))
@@ -2261,6 +2318,8 @@ class GalvosController(QWidget):
                 print('--- done!')
                 self.currentZPos=self.currentZPos+self.zstep/1000
                 self.powerIt=self.powerIt+1;
+                self.currentPositionStack=self.currentPositionStack+self.zstep
+                self.lineEdit_currentZpos.setText(str(self.currentPositionStack/1000))
                 print('--- power number: ' + str(self.powerIt))
                 if self.checkBoxPowerCurve.isChecked():
                     currentPowerValue=self.powerCurve[self.powerIt]
@@ -2270,7 +2329,6 @@ class GalvosController(QWidget):
                         self.horizontalScrollBar_power2ph.setValue(currentPowerValue)
                         txt= str(round(currentPowerValue,1)) + '%'
                         self.lineEdit_current_power.setText(txt)
-                        self.currentPositionStack=self.currentPositionStack+self.zstep
                         self.updatePowerCurve(self.currentZPos,round(currentPowerValue,1))
                 if self.checkBoxPowerCurve3P.isChecked():
                     currentPowerValue3P=self.powerCurve3P[self.powerIt]
