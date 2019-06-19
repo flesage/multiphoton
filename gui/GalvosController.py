@@ -315,6 +315,25 @@ class GalvosController(QWidget):
         self.pushButton_LS_down.clicked.connect(self.move_LS_down)
         self.pushButton_LS_left.clicked.connect(self.move_LS_left)
         self.pushButton_LS_right.clicked.connect(self.move_LS_right)
+        
+        #add click linescans
+        self.pushButton_addLineFromPoints.clicked.connect(self.addLineFromPoints)
+        self.add_line_from_points_state=True
+    #
+    def addLineFromPoints(self):
+        print('adding first point')
+        self.toggle_add_line_from_points_state()
+        
+    def toggle_add_line_from_points_state(self):
+        if (self.add_line_from_points_state):
+            self.pushButton_addLineFromPoints.setText('Stop')
+            self.add_line_from_points_state=False
+            self.viewer.updateGenerateLineFromPointFlag(True)
+        else:
+            self.pushButton_addLineFromPoints.setText('Add points')
+            self.add_line_from_points_state=True
+            self.viewer.updateGenerateLineFromPointFlag(False)
+
 
     #autolineScans:
     def enableMoveButtons(self,val):

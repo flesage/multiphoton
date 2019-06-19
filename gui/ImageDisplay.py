@@ -40,6 +40,11 @@ class PointROI(pg.graphicsItems.ROI.EllipseROI):
         pg.graphicsItems.ROI.ROI.__init__(self, pos, size, **args)
         self.aspectLocked = True
 
+class PointForLineROI(pg.graphicsItems.ROI.EllipseROI):
+
+    def __init__(self, pos, size, **args):
+        pg.graphicsItems.ROI.ROI.__init__(self, pos, size, **args)
+        self.aspectLocked = True
 
 class po2Viewer(Queue.Queue):
 
@@ -116,9 +121,16 @@ class ChannelViewer(Queue.Queue):
         self.imv.show()
         self.imi=self.imv.getImageItem()
         self.generatePointFlag=False
+        self.generateLineFromPointFlag=False
         self.lineScanFlag=False
         self.orthogonalLines=False
         self.Scene.sigMouseClicked.connect(self.onClick)
+        self.counterLineFromPoint=0
+        self.pointsForLine=[]
+        self.lineFromPoint_x0=[]
+        self.lineFromPoint_x1=[]
+        self.lineFromPoint_y0=[]
+        self.lineFromPoint_y1=[]
         #self.Scene.sigMouseClicked.connect(self.mouseMoved)
         
     def displayLogo(self):
@@ -133,6 +145,9 @@ class ChannelViewer(Queue.Queue):
     def updateGeneratePointFlag(self,flag):
         self.generatePointFlag=flag
         
+    def updateGenerateLineFromPointFlag(self,flag):
+        self.generateLineFromPointFlag=flag
+        
     def onClick(self, event):
         posMouse=self.imi.mapFromScene(event.scenePos())
         items=self.Scene.items(event.scenePos())
@@ -146,6 +161,21 @@ class ChannelViewer(Queue.Queue):
                         self.pointSelected=i
                         self.removeSelectedPoint()
                         print('click!')
+        elif(self.generateLineFromPointFlag):
+            if event.button()==1:
+                self.counterLineFromPoint+=1
+                if (self.counterLineFromPoint % 2):
+                    print('create first point')
+                    self.lineFromPoint_x0=posMouse.x()
+                    self.lineFromPoint_y0=posMouse.y()
+                    self.createPointForLine(self.lineFromPoint_x0,self.lineFromPoint_y0)
+                else:
+                    print('create second point')
+                    self.lineFromPoint_x1=posMouse.x()
+                    self.lineFromPoint_y1=posMouse.y()
+                    self.createPointForLine(self.lineFromPoint_x1,self.lineFromPoint_y1)
+                    self.createLineFromPoint(self.lineFromPoint_x0,self.lineFromPoint_y0,self.lineFromPoint_x1,self.lineFromPoint_y1)
+                    self.removeAllPointsForLines()
         else:    
             for i in items:
                 if isinstance(i, LineScanROI):
@@ -173,6 +203,17 @@ class ChannelViewer(Queue.Queue):
         #self.points.append(pointROI([posX, posY])) #pen=(4,9)
         self.imv.addItem(self.points[-1])
         self.getPositionPoints()
+        
+    def createPointForLine(self,posX,posY):
+        self.pointsForLine.append(PointForLineROI([posX, posY],[5,5],pen=pg.mkPen('r',width=4.5)))
+        #self.points.append(pointROI([posX, posY])) #pen=(4,9)
+        self.imv.addItem(self.pointsForLine[-1])
+        
+    def createLineFromPoint(self,x0,y0,x1,y1):
+        self.resetLines()        
+        self.lines.append(LineScanROI([x1, y1], [x0, 2*y1-y0], width=1, pen=pg.mkPen('y',width=7)))
+        self.imv.addItem(self.lines[-1])
+        self.displayLines()
         
     def addLines(self):
         self.resetLines()        
@@ -267,6 +308,12 @@ class ChannelViewer(Queue.Queue):
             for point in self.points:
                 self.imv.removeItem(point)
         self.points=[]
+
+    def removeAllPointsForLines(self):
+        if len(self.pointsForLine)>0:
+            for point in self.pointsForLine:
+                self.imv.removeItem(point)
+        self.pointsForLine=[]
                 
     def highlightLine(self,selectedLine):
         if len(self.lines)>0:
