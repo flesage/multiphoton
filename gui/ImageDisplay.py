@@ -33,6 +33,23 @@ class LineScanROI(pg.graphicsItems.ROI.ROI):
         pg.graphicsItems.ROI.ROI.__init__(self, pos1, size=pg.Point(l, width), angle=ang, **args)
         self.addScaleRotateHandle([0, 0.5], [1, 0.5])
         self.addScaleRotateHandle([1, 0.5], [0, 0.5])
+        
+class LineScanROI_perp(pg.graphicsItems.ROI.ROI):
+ 
+    def __init__(self, pos1, pos2, width, **args):
+        pos1 = pg.Point(pos1)
+        pos2 = pg.Point(pos2)
+        d = pos2-pos1
+        l = d.length()
+        ang = pg.Point(1, 0).angle(d)
+        ra = ang * np.pi / 180.
+        c = pg.Point(-width/2. * math.sin(ra), -width/2. * math.cos(ra))
+        pos1 = pos1 + c
+        
+        pg.graphicsItems.ROI.ROI.__init__(self, pos1, size=pg.Point(l, width), angle=ang, **args)
+        self.addScaleRotateHandle([0, 0.5], [1, 0.5])
+        self.addScaleRotateHandle([1, 0.5], [0, 0.5])        
+
 
 class PointROI(pg.graphicsItems.ROI.EllipseROI):
 
@@ -46,6 +63,25 @@ class PointForLineROI(pg.graphicsItems.ROI.EllipseROI):
         pg.graphicsItems.ROI.ROI.__init__(self, pos, size, **args)
         self.aspectLocked = True
 
+class RectROI(pg.graphicsItems.ROI.ROI):
+   
+    def __init__(self, pos, size, centered=False, sideScalers=False, **args):
+        #QtGui.QGraphicsRectItem.__init__(self, 0, 0, size[0], size[1])
+        pg.graphicsItems.ROI.ROI.__init__(self, pos, size, **args)
+        if centered:
+            center = [0.5, 0.5]
+        else:
+            center = [0, 0]
+            
+        #self.addTranslateHandle(center)
+        self.addScaleHandle([1, 1], center)
+        if sideScalers:
+            self.addScaleHandle([1, 0.5], [center[0], 0.5])
+            self.addScaleHandle([0.5, 1], [0.5, center[1]])
+
+
+
+
 class po2Viewer(Queue.Queue):
 
     def __init__(self, name):
@@ -57,13 +93,30 @@ class po2Viewer(Queue.Queue):
         self.po2plot.plot(title=name)
         self.po2plot.setTitle(name)
         self.po2plot.setLabel('left', text='Intensity')
-        self.po2plot.setLabel('bottom', text='Time')
-        
+        self.po2plot.setLabel('bottom', text='Time [usec]')
+        self.normFlag=0
+        self.logFlag=0
         self.po2plot.resize(650, 450)
         self.po2plot.move(1200, 500)
+        self.previousTracesFlag=False
+        self.storedData=np.zeros((100,1))
         
-    def getAcquisitionParameters(self,numAverages):
+    def showPreviousTraces(self,flag):
+        self.previousTracesFlag=flag
+        
+    def getAcquisitionParameters(self,numAverages,gate_on,gate_off,freqPO2):
         self.numAverages=numAverages
+        self.gate_on=gate_on #in usec
+        self.gate_off=gate_off #in usec
+        self.numPoints=(self.gate_on+self.gate_off)*1e-6*freqPO2
+        self.timeResolution=1/freqPO2
+        self.xAxis=np.arange(0,self.numPoints*self.timeResolution,self.timeResolution)
+        
+    def getAcquisitionParameters3P(self,numAverages,freq_galvo,freqPO2):
+        self.numAverages=numAverages
+        self.numPoints=(1/freq_galvo)*freqPO2
+        self.timeResolution=1/freqPO2
+        self.xAxis=np.arange(0,self.numPoints*self.timeResolution,self.timeResolution)
         
     def showPlot(self):
         self.po2plot.show()
@@ -71,17 +124,35 @@ class po2Viewer(Queue.Queue):
     def clearPlot(self):
         self.po2plot.clear()
         
+    def initPlot(self,numAcquisitions):
+        self.counter=-1
+        self.clearPlot()
+        if self.previousTracesFlag:
+            self.po2plot.plot(self.xAxis,self.storedData,pen=pg.mkPen(0.5, width=2))
+        self.storedData=np.zeros((self.numPoints,numAcquisitions))
+
     def update(self):
         try:
             #print('getting data...')
             data = self.get(False)
             #averageDecayCurve=np.mean(data,2)
             #x=np.linspace(0,data/(1e6),data.shape[0])
-            data=np.reshape(data, (-1,self.numAverages))
-            print(data.shape)
-            data=np.mean(data,1)
-            self.po2plot.plot(data)
-            print('data plotted!')
+            data_to_plot=-np.reshape(data, (self.numAverages,-1))
+            print(data_to_plot.shape)
+            #data=-data
+            data_to_plot=np.mean(data_to_plot,0)            
+            #if self.normFlag == 1:
+            #    data=data-np.min(data)
+            #    data=data/np.max(data)
+            #if self.logFlag == 1:
+            #    self.po2plot.plot(self.xAxis,np.log(data+1),pen=pg.mkPen('w', width=3))
+                #self.storedData[:,self.counter]=np.log(data+1)
+            #else:    
+            #self.po2plot.plot(self.xAxis,data+1,pen=pg.mkPen('w', width=3))
+            self.po2plot.plot(data_to_plot,pen=pg.mkPen('w', width=3))
+            
+                #self.storedData[:,self.counter]=data+1
+            #print('data plotted!')
             #- pour direct
         except Queue.Empty:
             # Ignore and preserve previous state of display
@@ -89,8 +160,42 @@ class po2Viewer(Queue.Queue):
         #self.Scene.sigMouseClicked.connect(self.mouseMove   
      
 
-class ChannelViewer(Queue.Queue):
+class CurrentLineViewer(Queue.Queue):
 
+    def __init__(self,data):
+        
+        Queue.Queue.__init__(self,2)
+        
+        self.currentImv = pg.ImageView(None, 'Line Viewer')
+        self.currentImv.setWindowTitle('Line Viewer')
+        self.currentScene=self.currentImv.scene
+        self.data=data
+        
+        self.currentImv.show()
+        self.currentImi=self.currentImv.getImageItem()
+        self.setAngio(self.data)
+        self.currentlines = []
+        print("CurrentLineViewer created!")
+
+    def setAngio(self,data):
+        self.currentImv.setImage(data,pos=(0,0),scale=(1,1))
+
+    def displayCurrentLine(self,x_center,y_center,angleLine,length):
+        print('currentLines number: '+str(len(self.currentlines)))
+        if len(self.currentlines)>0:
+            for line in self.currentlines:
+                print("killing lines")
+                self.currentImv.removeItem(line)
+        self.currentlines=[]
+        x1=x_center+math.cos(angleLine)*length/2;
+        y1=y_center+math.sin(angleLine)*length/2;        
+        x2=x_center-math.cos(angleLine)*length/2;
+        y2=y_center-math.sin(angleLine)*length/2;
+        self.currentlines.append(LineScanROI([x2, y2], [x1, 2*y2-y1], width=1, pen=pg.mkPen('y',width=7)))
+        self.currentImv.addItem(self.currentlines[-1])
+
+
+class ChannelViewer(Queue.Queue):
 
     def __init__(self, name,windowYPosition):
         
@@ -115,6 +220,7 @@ class ChannelViewer(Queue.Queue):
         
         # display and set on_click callback
         self.shift_display = 0  
+        self.shift_display_live = 0  
         self.displayLines()
         #self.imv.move(1200, windowYPosition)
         #self.imv.resize(650, 450)
@@ -132,12 +238,18 @@ class ChannelViewer(Queue.Queue):
         self.lineFromPoint_y0=[]
         self.lineFromPoint_y1=[]
         #self.Scene.sigMouseClicked.connect(self.mouseMoved)
+        self.levelFlag=True
+        self.averageOn=False
+        self.scanningType='SawTooth'
+        
+    def setGalvoController(self,galvo_controller):
+        self.galvo_controller=galvo_controller
         
     def displayLogo(self):
         logo = np.asarray(Image.open('C:\git-projects\multiphoton\liom_logo.png'))
         logo.setflags(write=1)
         logo=logo.transpose((1,0,2))
-        self.imv.setImage(logo) 
+        self.imv.setImage(logo,pos=(0,0),scale=(1,1)) 
         
     def mouseMoved(self,pos):
         print ("Image position:", self.imi.mapToView(pos))
@@ -184,12 +296,13 @@ class ChannelViewer(Queue.Queue):
                         self.removeSelectedLine()
                     elif event.button()==1:
                         self.CurrentLineInfo=self.getMouseSelectedLinePosition()
-                #if isinstance(i,pg.ROI):
-                #    self.rectSelected=i
-                #    if event.button()==2:
-                #        self.removeSelectedRectangle()
-                #    elif event.button()==1:
-                #        self.CurrentRectInfo=self.getMouseSelectedRectPosition()     
+                        self.galvo_controller.update_linescan()
+                if isinstance(i,RectROI):
+                    self.rectSelected=i
+                    if event.button()==2:
+                        self.removeSelectedRectangle()
+                    elif event.button()==1:
+                        self.CurrentRectInfo=self.getMouseSelectedRectPosition()     
                 if isinstance(i,PointROI):
                     self.pointSelected=i
                     if event.button()==2:
@@ -233,8 +346,8 @@ class ChannelViewer(Queue.Queue):
         if len(self.points)>0:
             for point in self.points:
                 tempPos=point.pos()
-                x.append(tempPos[0])
-                y.append(tempPos[1])
+                x.append(tempPos[1])
+                y.append(tempPos[0])
         else:
             print('no points on Image')
         return x,y
@@ -265,7 +378,7 @@ class ChannelViewer(Queue.Queue):
         height=round(ny/5)
         xOrigin=round(nx/2)-round(width/2)
         yOrigin=round(ny/2)-round(height/2)
-        self.rect.append(pg.ROI([xOrigin,yOrigin], size=[width,height], angle=0.0, invertible=False, maxBounds=None, snapSize=1.0, scaleSnap=False, translateSnap=False, rotateSnap=False, parent=None, pen='y', movable=True, removable=False))
+        self.rect.append(RectROI([xOrigin,yOrigin], size=[width,height], angle=0.0, invertible=False, maxBounds=None, snapSize=1.0, scaleSnap=False, translateSnap=False, rotateSnap=False, parent=None, pen='y', movable=True, removable=False))
         self.rect[-1].addScaleHandle(pos=[1,1],center=[0,0])
         self.rectFlag.append(0)
         #self.rect[-1].addRotateHandle(pos=[0,1],center=[0.5,0.5])
@@ -415,6 +528,9 @@ class ChannelViewer(Queue.Queue):
             print('not enough lines to delete')
 
         
+    def getScanningType(self,typeOfScan):
+        self.scanningType=typeOfScan
+                
     def generateRandomLine(self):
         x1=random.uniform(1, 256)
         y1=random.uniform(1, 256)
@@ -428,19 +544,21 @@ class ChannelViewer(Queue.Queue):
         x_e, y_e=self.region.pos()                  #coordinates of the lower left corner edge
         length,width=self.region.size()             #length and width of the line
         alpha_e=self.region.angle()*math.pi/180     #angle in radiants of the line
-        x_0=x_e-width/2*math.sin(alpha_e)           #coordinate transform to obtain origin of line
+        x_0=x_e+width/2*math.sin(alpha_e)           #coordinate transform to obtain origin of line
         y_0=y_e+width/2*math.cos(alpha_e)        
         delta_x= length * math.cos(alpha_e)
         delta_y= length * math.sin(alpha_e)      
         x_1=x_0+delta_x
         y_1=y_0+delta_y
         return x_0, y_0, x_1, y_1, length
+  
         
     def getAngleAndCenterSelectedLinePosition(self,lineNumber):
         x_e, y_e=self.lines[lineNumber].pos() #coordinates of the lower left corner edge
         length,width=self.lines[lineNumber].size()
-        alpha_e=self.lines[lineNumber].angle()*math.pi/180
-        
+        alpha_e=self.lines[lineNumber].angle()*math.pi/180.0
+        x_e=x_e+width/2*math.sin(alpha_e)           #coordinate transform to obtain origin of line
+        y_e=y_e+width/2*math.cos(alpha_e)         
         x_center=x_e+length/2*math.cos(alpha_e)
         y_center=y_e+length/2*math.sin(alpha_e)
        
@@ -580,43 +698,89 @@ class ChannelViewer(Queue.Queue):
         raw=sio.loadmat(path)['im']   
         s=250
         raw=raw[s,:,:]
-        self.imv.setImage(-raw)
+        self.imv.setImage(-raw,pos=(0,0),scale=(1,1))
         
     def setLineScanFlag(self,status):
         self.lineScanFlag=status
     
     @pyqtSlot(int)
     def move_offset_display(self, shift_display):
+        print('shift display value: '+str(shift_display))
         self.shift_display = shift_display   
+    
+    @pyqtSlot(int)
+    def move_offset_display_live(self, shift_display_live):
+        print('shift display live value: '+str(shift_display_live))
+        self.shift_display_live = shift_display_live
+    
+    def createAveragedDataBuffer(self,sizeBuffer,sizeX,sizeY):
+        print('created!')
+        self.avData=np.zeros((sizeBuffer,sizeY,sizeX))
+        self.counter=0
+        self.sizeBuffer=sizeBuffer
+        
+    def checkAverageFlag(self,flag,sizeBuffer,sizeX,sizeY):
+        self.averageOn=flag
+        self.createAveragedDataBuffer(sizeBuffer,sizeX,sizeY)
     
     def update(self):
         try:
             data = self.get(False)
-            
-            if (self.lineScanFlag):
-                #inverting reverse path
-                sizeArray = data.shape
-                rowIndicesToInvert=np.arange(0,sizeArray[0],2)
-                colIndices=np.arange(0,sizeArray[1],1)
-                colIndicesInvert=np.arange(sizeArray[1]-1,-1,-1)
-                tmp=data[rowIndicesToInvert,:]
-                tmp[:,colIndices]=tmp[:,colIndicesInvert]
-                data[rowIndicesToInvert,:]=tmp
-                #shifting of lines:
-                rowIndicesToRoll=np.arange(0,sizeArray[0],2)
-                colIndices=np.arange(0,sizeArray[1],1)
-                colIndicesRoll=np.roll(colIndices,self.shift_display)
-                tmp=data[rowIndicesToRoll,:]
-                tmp[:,colIndices]=tmp[:,colIndicesRoll]
-                data[rowIndicesToRoll,:]=tmp
-                data=data.transpose()
-            self.imv.setImage(-data)
-            self.imi=self.imv.getImageItem()
+            if (self.averageOn and not(self.lineScanFlag)):
+                print('averaging on! '+str(self.counter))
+                self.avData[self.counter,:,:]=data
+                self.counter=(self.counter+1)%self.sizeBuffer
+                sizeArray = self.avData.shape
+                #tmp=self.avData.reshape((sizeArray[0]*sizeArray[1],sizeArray[2]))
+                tmp=np.mean(self.avData,axis=0)
+                self.imv.setImage(-tmp,autoRange=False,autoLevels=self.levelFlag,pos=(0,0),scale=(1,1))
+                self.imi=self.imv.getImageItem()
+            else:
+                if (self.lineScanFlag):
+                    #inverting reverse path
+                    sizeArray = data.shape
+                    rowIndicesToInvert=np.arange(0,sizeArray[0],2)
+                    colIndices=np.arange(0,sizeArray[1],1)
+                    colIndicesInvert=np.arange(sizeArray[1]-1,-1,-1)
+                    tmp=data[rowIndicesToInvert,:]
+                    tmp[:,colIndices]=tmp[:,colIndicesInvert]
+                    data[rowIndicesToInvert,:]=tmp
+                    #shifting of lines:
+                    rowIndicesToRoll=np.arange(0,sizeArray[0],2)
+                    colIndices=np.arange(0,sizeArray[1],1)
+                    colIndicesRoll=np.roll(colIndices,self.shift_display)
+                    tmp=data[rowIndicesToRoll,:]
+                    tmp[:,colIndices]=tmp[:,colIndicesRoll]
+                    data[rowIndicesToRoll,:]=tmp
+                    data=data.transpose()
+                if (self.scanningType=='Triangular'):
+                    #inverting reverse path
+                    sizeArray = data.shape
+                    rowIndicesToInvert=np.arange(0,sizeArray[0],2)
+                    colIndices=np.arange(0,sizeArray[1],1)
+                    colIndicesInvert=np.arange(sizeArray[1]-1,-1,-1)
+                    tmp=data[rowIndicesToInvert,:]
+                    tmp[:,colIndices]=tmp[:,colIndicesInvert]
+                    data[rowIndicesToInvert,:]=tmp
+                    #shifting of lines:
+                    rowIndicesToRoll=np.arange(0,sizeArray[0],2)
+                    colIndices=np.arange(0,sizeArray[1],1)
+                    colIndicesRoll=np.roll(colIndices,self.shift_display_live)
+                    tmp=data[rowIndicesToRoll,:]
+                    tmp[:,colIndices]=tmp[:,colIndicesRoll]
+                    data[rowIndicesToRoll,:]=tmp
+                    data=np.flip(data,axis=1)
+                    
+                self.imv.setImage(-data,autoRange=False,autoLevels=self.levelFlag,pos=(0,0),scale=(1,1))
+                self.imi=self.imv.getImageItem()
 
             #- pour direct
         except Queue.Empty:
             # Ignore and preserve previous state of display
             pass
+        
+    def changeLevelFlag(self,flag):
+        self.levelFlag=flag
         
     def toggleLinearSelection(self):
         if self.linescan_not_displayed:

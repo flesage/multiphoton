@@ -27,7 +27,7 @@ class Motorsclass:
         self.ser.write('1MO\r')
         self.ser.write('2MO\r')
         self.ser.write('3MO\r')
-        self.home()
+        #self.home()
     
     def home(self):
 #        Wait until homing is done to return from this function to
@@ -439,10 +439,7 @@ class ThorlabsMotor(APTMotor.APTMotor):
         super(ThorlabsMotor, self).__init__(SN, HWTYPE)
         self.motor =  APTMotor.APTMotor(SN, HWTYPE) # SN and motor type
         self.motor.initializeHardwareDevice()
-        print 'going home'
-        self.goHome()
-        print 'done!'
-        
+        self.startPosition=0
         #self.verbose = " "
         
 #        self.initializeHardwareDevice()
@@ -452,23 +449,32 @@ class ThorlabsMotor(APTMotor.APTMotor):
         
     def goHome(self):
         self.configthorlabsmotor=False
-        self.mAbs(0.0)
+        self.mcAbs(0.0)
         self.configthorlabsmotor=True
         
     def setpos(self,commandPos):
         self.configthorlabsmotor=False
         print 'going to position...'
-        self.mAbs(commandPos)
+        self.mcAbs(commandPos)
         print 'done!'
         self.configthorlabsmotor=True
+        
+    def setposRel(self,commandPos):
+        self.configthorlabsmotor=False
+        print 'moving of ' + str(commandPos) + '...'
+        self.mcRel(commandPos)
+        print 'done!'
+        self.configthorlabsmotor=True
+        
+    def setStartPosition(self):
+        self.startPosition=self.motor.getPos() 
 
     def getpos(self):
-        self.motor.getPos() 
+        currentPosition=self.motor.getPos() 
+        return currentPosition
         
     def clean_up_APT(self):
-        print 'cleaning up APT...'        
         self.cleanUpAPT()
-        print 'done!'
         
     def __del__(self):
         self.cleanUpAPT()

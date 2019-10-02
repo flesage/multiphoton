@@ -27,7 +27,10 @@ pmt = 'ai0:1'
 
 laser_intensity_device = 'COM7'
 
-rotMot3P_SN = 27000519
+autocorr_device='/Dev3'
+autocorr_apd='ai20'
+
+rotMot3P_SN = 27000620
 rotMot3P_HW = 27
 
 motorscomport='COM9'

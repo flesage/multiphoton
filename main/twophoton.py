@@ -79,6 +79,10 @@ if __name__ == '__main__':
     # as a slave task
     ai_meas = AnalogInputTask(config.pmt_device,config.pmt,2)
     galvos.setSynchronizedAITask(ai_meas)
+
+    #autocorrelator:
+    ai_APD = AnalogInputTask(config.autocorr_device,config.autocorr_apd,1)
+    
     
     # Set viewers, update at 10 Hz based on qt timer, can skip images if too slow
     viewer = ChannelViewer('Channel 0',0)
@@ -105,6 +109,7 @@ if __name__ == '__main__':
     galvos_controller.setShutter3Ph(shutter3ph)
     galvos_controller.setAoEOM(power2ph)
     galvos_controller.setMotors(motors)
+    galvos_controller.setAiAPD(ai_APD)
     #galvos_controller.setMaitai(laser)
     #galvos_controller.setThorlabs(rotmotor3P)
     galvos_controller.setAiTask(ai_meas)
@@ -114,8 +119,12 @@ if __name__ == '__main__':
     galvos_controller.setPO2Viewer(po2viewer)
 
     galvos_controller.move(150,0)
-    galvos_controller.setFixedSize(715,900)
+    galvos_controller.setFixedSize(715,932)
     
+    viewer.setGalvoController(galvos_controller)
+    viewer2.setGalvoController(galvos_controller)
+    
+    galvos_controller.initialize_triangular_display()
     galvos_controller.show()
 
     
@@ -129,10 +138,11 @@ if __name__ == '__main__':
     # Start the gui controlling the acquisition (save, views, etc.)
     app.exec_()  
     #timer3.stop()
-    
+    galvos_controller.write_motor_position()
     timer.stop()
     timer2.stop()    
     timer3.stop()
     #galvos_controller.turnOffWheel3P()
+    galvos_controller.AC_clean_motor()
     galvos_controller.kill3PWheel()
     galvos_controller.closeLaser()

@@ -253,7 +253,7 @@ class APTMotor(object):
         if not self.Connected:
             raise Exception('Please connect first! Use initializeHardwareDevice')
         # Save velocities to reset after move
-        maxVel = self.getVels()
+        maxVel = self.getVel()
         # Set new desired max velocity
         self.setVel(moveVel)
         self.mRel(relDistance)
