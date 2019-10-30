@@ -188,6 +188,9 @@ class po2Viewer(Queue.Queue):
             self.PO2NormCurve.plot(self.xAxis,self.normData[:,0],pen=pg.mkPen('w', width=3))
             self.PO2LogNormCurve.plot(self.xAxis,self.LogData[:,0],pen=pg.mkPen('w', width=3))
             self.PO2FFTCurve.plot(frq,self.FFTData[:,0],pen=pg.mkPen('w', width=3))
+            
+
+            
 
             valueMaxCurve = np.amax(self.storedData[:,0])
             
@@ -356,6 +359,7 @@ class CurrentLineViewer(Queue.Queue):
         self.currentImi=self.currentImv.getImageItem()
         self.setAngio(self.data)
         self.currentlines = []
+
         print("CurrentLineViewer created!")
 
     def setAngio(self,data):
@@ -397,7 +401,8 @@ class ChannelViewer(Queue.Queue):
         self.setTestImage()
         #self.generateAutoLines()
         #self.displayLogo()
-        
+        self.intensityCurve =[]
+        self.intensityFlag=0
         
         # display and set on_click callback
         self.shift_display = 0  
@@ -960,12 +965,32 @@ class ChannelViewer(Queue.Queue):
     def checkAverageFlag(self,flag,sizeBuffer,sizeX,sizeY):
         self.averageOn=flag
         self.createAveragedDataBuffer(sizeBuffer,sizeX,sizeY)
-    
+        
+    def plotIntensityFlag(self,intensityFlag):
+        print('intensity Flag set!')
+        self.intensityFlag=intensityFlag
+        self.intensityCurve=[]
+        if intensityFlag:
+            self.intensityCurvePlot = pg.PlotWidget(None)
+            self.intensityCurvePlot.setWindowTitle('Intensity viewer')
+            self.intensityCurvePlot.plot(title='Intensity viewer')
+            self.intensityCurvePlot.setTitle('Intensity over frames')
+            self.intensityCurvePlot.setLabel('left', text='Intensity')
+            self.intensityCurvePlot.setLabel('bottom', text='Acqusitions')
+            self.intensityCurvePlot.show()
+            
     def update(self):
         try:
             data = self.get(False)
+            if self.intensityFlag:
+                tempAv=-np.mean(data)
+                print(tempAv)
+                self.intensityCurve.append(tempAv)
+                self.intensityCurvePlot.plot(self.intensityCurve,pen=pg.mkPen('w', width=3))
             if (self.averageOn and not(self.lineScanFlag)):
                 print('averaging on! '+str(self.counter))
+
+
                 self.avData[self.counter,:,:]=data
                 self.counter=(self.counter+1)%self.sizeBuffer
                 sizeArray = self.avData.shape

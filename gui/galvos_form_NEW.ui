@@ -1275,6 +1275,19 @@
                </widget>
               </item>
               <item>
+               <widget class="QCheckBox" name="checkBox_trackIntensity">
+                <property name="maximumSize">
+                 <size>
+                  <width>110</width>
+                  <height>16777215</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>Track Intensity</string>
+                </property>
+               </widget>
+              </item>
+              <item>
                <spacer name="horizontalSpacer_5">
                 <property name="orientation">
                  <enum>Qt::Horizontal</enum>
@@ -1310,13 +1323,13 @@
                <widget class="QLineEdit" name="lineEdit_averagingRange">
                 <property name="minimumSize">
                  <size>
-                  <width>50</width>
+                  <width>30</width>
                   <height>0</height>
                  </size>
                 </property>
                 <property name="maximumSize">
                  <size>
-                  <width>50</width>
+                  <width>30</width>
                   <height>16777215</height>
                  </size>
                 </property>
@@ -6975,6 +6988,7 @@
  <resources>
   <include location="icons.qrc"/>
   <include location="logo.qrc"/>
+  <include location="../../../Users/LiomW17/.designer/backup/icons.qrc"/>
  </resources>
  <connections/>
 </ui>

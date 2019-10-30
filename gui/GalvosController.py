@@ -1567,19 +1567,25 @@ class GalvosController(QWidget):
         linescan_y_1_um=linescan_px_y_1/(nextra+ny)*height
         linescan_y_2_um=linescan_px_y_2/(nextra+ny)*height
 
-        linescan_y_1_um_forOCT=linescan_px_y_1/(nextra+ny)*height_forOCT
-        linescan_y_2_um_forOCT=linescan_px_y_2/(nextra+ny)*height_forOCT
+        linescan_shift_x=float(self.horizontalScrollBar_line_scan_shift_x.value())
+        linescan_shift_y=float(self.horizontalScrollBar_line_scan_shift_y.value())
+
+        linescan_x_1_um_forOCT=(linescan_px_x_1+linescan_shift_y/2)/nx*width
+        linescan_x_2_um_forOCT=(linescan_px_x_2+linescan_shift_y/2)/nx*width
+        linescan_y_1_um_forOCT=(linescan_px_y_1+linescan_shift_x/2)/(nextra+ny)*height_forOCT
+        linescan_y_2_um_forOCT=(linescan_px_y_2+linescan_shift_x/2)/(nextra+ny)*height_forOCT
         
         center_x=(linescan_x_2_um+linescan_x_1_um)/2-width/2
         center_y=(linescan_y_2_um+linescan_y_1_um)/2-height/2
  
+        center_x_forOCT=(linescan_x_1_um_forOCT+linescan_x_2_um_forOCT)/2-width/2
         center_y_forOCT=(linescan_y_2_um_forOCT+linescan_y_1_um_forOCT)/2-height/2
         
         print('LINE: position: '+str(center_x)+','+str(center_y))
         
         linescan_width = math.sqrt(math.pow((linescan_x_2_um-linescan_x_1_um),2)+math.pow((linescan_y_2_um-linescan_y_1_um),2))
         
-        strCoord=str(center_x)+'/'+str(center_y_forOCT) +'/'+str(self.lineScanNumber+1)
+        strCoord=str(center_x_forOCT)+'/'+str(center_y_forOCT) +'/'+str(self.lineScanNumber+1)
             
         txtCoord = open(r"C:\git-projects\multiphoton\coordinates.txt","w") 
         txtCoord.write(strCoord)
@@ -2392,7 +2398,8 @@ class GalvosController(QWidget):
         self.make_connection_offset_Display_live()
         self.viewer.getScanningType(self.comboBox_scantype.currentText())
         self.viewer2.getScanningType(self.comboBox_scantype.currentText())
-
+        self.intensityFlag=self.checkBox_trackIntensity.isChecked()
+        self.viewer2.plotIntensityFlag(self.intensityFlag)
         #self.liveScanNumber=self.liveScanNumber+1;
         self.previewScanFlag = True
         self.pushButton_stop.setEnabled(True)
