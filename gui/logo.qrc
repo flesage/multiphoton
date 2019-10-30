@@ -1,5 +1,6 @@
 <RCC>
   <qresource prefix="logo">
     <file>liom_logo.png</file>
+    <file>colormap.png</file>
   </qresource>
 </RCC>

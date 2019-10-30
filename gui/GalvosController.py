@@ -74,6 +74,8 @@ class GalvosController(QWidget):
         self.pushButton_shutter_3ph.setStyleSheet("background-color: pale gray")
 
         self.maitaiFlag=0
+        self.checkBox_PO2_channel0.clicked.connect(self.changedViewerForPO2)
+        self.checkBox_PO2_channel1.clicked.connect(self.changedViewerForPO2)
         self.checkBoxMaiTai.clicked.connect(self.toggle_maitai_control)
         self.pushButton_maitai.setEnabled(False)
         self.pushButton_maitaiShutter.setEnabled(False)
@@ -353,8 +355,37 @@ class GalvosController(QWidget):
         self.pushButton_ACMotor_SetPeakPos.clicked.connect(self.AC_set_peak_position_motor)
         self.pushButton_ACMotor_GoPeakPos.clicked.connect(self.AC_go_to_peak_position_motor)
         self.AC_peakPosition=0.0
+        
+        #Display:
+        self.pushButton_AutoRange.clicked.connect(self.setAutoRange)
+        self.pushButton_AutoLevels.clicked.connect(self.setAutoLevels)
+        self.autoRangeFlag=0
+        self.autoLevelsFlag=0
     #
-    
+    def setAutoRange(self):
+        if (self.autoRangeFlag):
+            self.pushButton_AutoRange.setText('Auto Range: OFF')
+            self.pushButton_AutoRange.setStyleSheet("background-color: gray")
+            self.autoRangeFlag=0
+        else:
+            self.pushButton_AutoRange.setText('Auto Range: ON')
+            self.pushButton_AutoRange.setStyleSheet("background-color: yellow")
+            self.autoRangeFlag=1  
+        self.viewer.setAutoRange()
+        self.viewer2.setAutoRange()
+        
+    def setAutoLevels(self):
+        if (self.autoRangeFlag):
+            self.pushButton_AutoLevels.setText('Auto Levels: OFF')
+            self.pushButton_AutoLevels.setStyleSheet("background-color: gray")
+            self.autoRangeFlag=0
+        else:
+            self.pushButton_AutoLevels.setText('Auto Levels: ON')
+            self.pushButton_AutoLevels.setStyleSheet("background-color: yellow")
+            self.autoRangeFlag=1 
+        self.viewer.setAutoLevels()
+        self.viewer2.setAutoLevels() 
+           
     def initialize_triangular_display(self):
         self.viewer.getScanningType(self.comboBox_scantype.currentText())
         self.viewer2.getScanningType(self.comboBox_scantype.currentText())
@@ -563,9 +594,30 @@ class GalvosController(QWidget):
     
         
     #PO2 functons:
+    def defineViewerForPO2(self):
+        flagChannel0=self.checkBox_PO2_channel0.isChecked()
+        flagChannel1=self.checkBox_PO2_channel1.isChecked()
+        
+        if ((flagChannel0==1) & (flagChannel1==0)):
+            self.viewerPO2=self.viewer
+            self.viewerTxt='viewer'
+        elif ((flagChannel0==0) & (flagChannel1==1)):
+            self.viewerPO2=self.viewer2
+            self.viewerTxt='viewer'
+        else:
+            print('no channel for PO2 rectangle displayed')
+            self.viewerPO2=self.viewer
+            self.viewerTxt='viewer'
+            
+    def changedViewerForPO2(self):
+        self.clearGrid_PO2()
+        self.defineViewerForPO2()
+        self.clearGrid_PO2()
+    
     
     def updateViewerConsumer(self,flag):
-        self.ai_task.updateConsumerFlag('viewer',flag)
+        self.defineViewerForPO2()
+        self.ai_task.updateConsumerFlag(self.viewerTxt,flag)
     
     def po2_add_point(self):
         self.toggle_po2_add_point_state()
@@ -574,18 +626,18 @@ class GalvosController(QWidget):
         if (self.po2_add_point_state):
             self.pushButton_po2AddPoint.setText('Stop adding points')
             self.po2_add_point_state=False
-            self.viewer.updateGeneratePointFlag(True)
+            self.viewerPO2.updateGeneratePointFlag(True)
         else:
             self.pushButton_po2AddPoint.setText('Add Points')
             self.po2_add_point_state=True
-            self.viewer.updateGeneratePointFlag(False)
+            self.viewerPO2.updateGeneratePointFlag(False)
     
     def defineROI_PO2(self):
-        self.viewer.resetRect()
+        self.viewerPO2.resetRect()
         nx=float(self.lineEdit_nx.text())
         ny=float(self.lineEdit_ny.text())
-        self.viewer.createRectangle(nx,ny)
-        self.viewer.displayRectangles()
+        self.viewerPO2.createRectangle(nx,ny)
+        self.viewerPO2.displayRectangles()
     
     def set_PO2_xOffset(self):
         self.PO2_xOffset=self.horizontalScrollBar_PO2_xOffset.value()
@@ -597,7 +649,7 @@ class GalvosController(QWidget):
 
     
     def generateGrid_PO2(self):
-        [x_o,y_o,width,height]=self.viewer.getMouseSelectedRectPosition()
+        [x_o,y_o,width,height]=self.viewerPO2.getMouseSelectedRectPosition()
         self.nx=float(self.lineEdit_nx.text())
         self.ny=float(self.lineEdit_ny.text())
         self.n_extra=float(self.lineEdit_extrapoints.text())
@@ -622,9 +674,9 @@ class GalvosController(QWidget):
             self.po2_y_positions = y_pos_grid
             for i in x_pos:
                 for j in y_pos:
-                    self.viewer.createPoint(i,j)
-            self.viewer.displayPoints()
-            self.viewer.resetRect()
+                    self.viewerPO2.createPoint(i,j)
+            self.viewerPO2.displayPoints()
+            self.viewerPO2.resetRect()
             
     def convertPosToVolts(self):
         self.nx=float(self.lineEdit_nx.text())
@@ -633,7 +685,7 @@ class GalvosController(QWidget):
         self.width=float(self.lineEdit_width.text())
         self.height=float(self.lineEdit_height.text())
          
-        [self.x_pos,self.y_pos]=self.viewer.getPositionPoints()
+        [self.x_pos,self.y_pos]=self.viewerPO2.getPositionPoints()
         counter=0
         lengthx = len(self.x_pos)
         x_pos_grid=np.zeros(lengthx)
@@ -728,7 +780,7 @@ class GalvosController(QWidget):
         self.lineEdit_fixPosition_galvo3P.setText(str(self.centralPosition3PGalvo))
 
     def modifyGrid_PO2(self):
-        self.viewer.removeAllPoints()
+        self.viewerPO2.removeAllPoints()
         self.numberOfXPoints=self.horizontalScrollBar_xPoints.value()
         self.numberOfYPoints=self.horizontalScrollBar_yPoints.value()
         self.lineEdit_numXpoints.setText(str(self.numberOfXPoints))
@@ -736,13 +788,28 @@ class GalvosController(QWidget):
         self.generateGrid_PO2()
         
     def clearGrid_PO2(self):
-        self.viewer.removeAllPoints()
-        self.viewer.resetRect()
+        self.viewerPO2.removeAllPoints()
+        self.viewerPO2.resetRect()
+        
+    def defineChannelToPlot(self):
+        flagChannel0=self.checkBox_PO2_disp_channel0.isChecked()
+        flagChannel1=self.checkBox_PO2_disp_channel1.isChecked()
+        
+        if ((flagChannel0==1) & (flagChannel1==0)):
+            self.channelToPlotPO2=0
+        elif ((flagChannel0==0) & (flagChannel1==1)):
+            self.channelToPlotPO2=1
+        else:
+            print('no channel for PO2 display')
+            self.channelToPlotPO2=1
+        
         
     def start_po2_scan(self):
+        self.defineChannelToPlot()
+        flagPreviousTraces=self.checkBox_PO2_showPreviousTraces.isChecked()
         self.convertPosToVolts()
         self.showPO2Viewer()
-        self.ai_task.updateConsumerFlag('viewer',False)        
+        self.ai_task.updateConsumerFlag(self.viewerTxt,False)        
         
         power2ph=self.horizontalScrollBar_power2ph.value()
         self.setPower2ph(0)
@@ -760,28 +827,109 @@ class GalvosController(QWidget):
         gate_on = float(self.lineEdit_po2_gate_on.text())
         gate_off = float(self.lineEdit_po2_gate_off.text())
         voltage_on = 2.0*power2ph/100.0
-        self.freqPO2=2e5
+        self.freqPO2=5e5
         n_averages = int(self.lineEdit_n_po2_averages.text())
         self.po2viewer.getAcquisitionParameters(n_averages,gate_on,gate_off,self.freqPO2)
-        #self.po2viewer.initPlot(self,numAcquisitions)
+        self.po2viewer.showPreviousTraces(flagPreviousTraces)
+        
+        desiredNumTracesToPlot=int(self.lineEdit_n_po2_previousTraces.text())
+        numberOfPlots=self.po2_x_positions.shape[0]
+        
+        if (numberOfPlots<desiredNumTracesToPlot):
+            tracesToPlot=desiredNumTracesToPlot
+        else:
+            tracesToPlot=numberOfPlots
+                
+        self.po2viewer.initPlot(tracesToPlot)
 
         self.eom_task = PO2Acq(config.eom_device, config.eom_ao, gate_on, gate_off, voltage_on, n_averages,self.freqPO2)
         self.eom_task.setSynchronizedAITask(self.ai_task)
         self.eom_task.config()
+        
         # Acquire list of points to move to
         self.galvos.configOnDemand()
         self.ai_task.setDecoder(None)
-        self.ai_task.setDataConsumer(self.po2viewer,True,1,'po2plot',True)
+        self.ai_task.setDataConsumer(self.po2viewer,True,self.channelToPlotPO2,'po2plot',True)
         #
         self.get_current_z_depth()
         self.toggle_shutter2ph()
-        time.sleep(5)
+        time.sleep(1)
         # Loop over points by using the aoDoneSignal, start the first point manually
         self.i_po2_point = -1
-        self.eom_task.po2_task.signal_helper.aoDoneSignal.connect(self.nextPO2Point)
+        self.eom_task.po2_task.signal_helper.aoDoneSignal.connect(self.nextPO2Point)        
+        
+        #saving parameters:
+        nx_preview=int(self.lineEdit_nx.text())
+        ny_preview=int(self.lineEdit_ny.text())
+        width=float(self.lineEdit_width.text())
+        height=float(self.lineEdit_height.text())
+        self.gate_on_2P_PO2=gate_on
+        self.gate_off_2P_PO2=gate_on
+        self.freq_2P_PO2=self.freqPO2
+        self.voltage_on_2P_PO2=voltage_on
+        self.n_averages_2P_PO2=n_averages
+        if self.checkBox_enable_save.isChecked():
+            #if(self.i_po2_point>0):
+            #   print('stop saving...')
+            #  self.data_saver.stopSaving()
+            # self.ai_task.removeDataConsumer(self.data_saver)
+                
+            print('in save...')
+            self.data_saver=DataSaver(self.save_filename)
+            self.mouseName=self.lineEdit_mouse_name.text()
+            self.scanType = 'po2plot'      
+            self.pathRoot = posixpath.join('/',self.mouseName,self.scanDate,self.scanType)
+            self.po2PlotNumber = self.data_saver.checkAlreadyExistingFiles(self.pathRoot,self.scanType)
+            self.lineEdit_po2plot_acq.setText(str(self.po2PlotNumber))
+            self.scanNumber = self.scanType+'_'+str(self.po2PlotNumber) 
+            self.pathName = posixpath.join(self.pathRoot,self.scanNumber)
+            self.data_saver.setDatasetName(self.pathName) 
+            #self.data_saver.addAttribute('meas num:',self.i_po2_point+1)  
+            self.data_saver.addAttribute('total meas num:',self.po2_x_positions.shape[0])  
+            self.data_saver.addAttribute('x_pos',self.po2_x_positions)            
+            self.data_saver.addAttribute('y_pos',self.po2_y_positions)              
+            self.data_saver.addAttribute('depth',self.currentZPos)
+            self.data_saver.addAttribute('x_FOV_center',self.currentXPos)
+            self.data_saver.addAttribute('y_FOV_center',self.currentYPos)
+            self.data_saver.addAttribute('last live scan:',self.liveScanNumber)
+            self.data_saver.addAttribute('last stack acq:',self.stackNumber)
+            self.data_saver.addAttribute('gate on [us]:',self.gate_on_2P_PO2)
+            self.data_saver.addAttribute('gate off [us]:',self.gate_off_2P_PO2)
+            self.data_saver.addAttribute('amplitude voltage ON:',self.voltage_on_2P_PO2)
+            self.data_saver.addAttribute('freq acq. PO2 [Hz]:',self.freq_2P_PO2)
+            self.data_saver.addAttribute('n averages:',self.n_averages_2P_PO2)
+            self.data_saver.addAttribute('width',width)
+            self.data_saver.addAttribute('height',height)                 
+            self.data_saver.addAttribute('nx',nx_preview)
+            self.data_saver.addAttribute('ny',ny_preview)  
+            self.data_saver.addAttribute('x_offset',self.PO2_xOffset)       
+            self.data_saver.addAttribute('y_offset',self.PO2_yOffset)       
+            self.comment=(self.lineEdit_comment.text())
+            self.data_saver.addAttribute('comment',self.comment)                
+            self.data_saver.setBlockSize(512)          
+            self.ai_task.setDataConsumer(self.data_saver,True,0,'save',True)
+            self.ai_task.setDataConsumer(self.data_saver,True,1,'save',True)
+            self.data_saver.startSaving()        
+        self.viewerPO2.initPO2Calculation(self.checkBox_PO2_fitData.isChecked())
+        
+        if (self.checkBox_PO2_fitData.isChecked()):
+            lowBoundary=10
+            upBoundary=80
+        else:
+            lowBoundary=17
+            upBoundary=150    
+        self.label_PO2_lowBoundary.setText(str(lowBoundary))
+        self.label_PO2_upperBoundary.setText(str(upBoundary))
+        
+        temperature=float(self.lineEdit_n_po2_temperature.text())
+        self.po2viewer.initCalculation(self.freqPO2,self.checkBox_PO2_fitData.isChecked(),temperature)
+        self.po2viewer.shiftDisplay(0,0)
         self.nextPO2Point()
 
     def start_3p_po2_scan(self):
+        self.defineChannelToPlot()
+        flagPreviousTraces=self.checkBox_PO2_showPreviousTraces.isChecked()
+
         voltage_on = float(self.lineEdit_po2_galvo_amplitude.text())
         offset = float(self.lineEdit_po2_galvo_offset.text())
         print('Starting 3P po2 acquisition:')
@@ -791,7 +939,7 @@ class GalvosController(QWidget):
         self.setGalvoToPos3P(pos)
         self.convertPosToVolts()        
         self.showPO2Viewer()
-        self.ai_task.updateConsumerFlag('viewer',False)        
+        self.ai_task.updateConsumerFlag(self.viewerTxt,False)        
         power3ph=self.horizontalScrollBar_power3ph.value()
         # Here we want to block until the power is reached since we need all curves to be taken with the same 
         # power
@@ -801,12 +949,21 @@ class GalvosController(QWidget):
         galvo_freq = float(self.lineEdit_po2_galvo_freq.text())
         n_averages = int(self.lineEdit_n_po2_averages.text())
 
-        self.freqPO2=2e5
+        self.freqPO2=5e5
         self.po2viewer.getAcquisitionParameters3P(n_averages,galvo_freq,self.freqPO2)
-
+        desiredNumTracesToPlot=int(self.lineEdit_n_po2_previousTraces.text())
+        numberOfPlots=self.po2_x_positions.shape[0]
+        
+        if (numberOfPlots<desiredNumTracesToPlot):
+            tracesToPlot=desiredNumTracesToPlot
+        else:
+            tracesToPlot=numberOfPlots
+                
+        self.po2viewer.initPlot(tracesToPlot)
         self.galvo_gate_task = PO2GatedAcq(config.gated_device, config.gated_ao)
         self.galvo_gate_task.setSynchronizedAITask(self.ai_task)
         self.galvo_gate_task.config(galvo_freq, voltage_on, offset, n_averages,self.freqPO2)
+        
         # Acquire list of points to move to
         self.galvos.configOnDemand()
         self.ai_task.setDecoder(None)
@@ -814,9 +971,75 @@ class GalvosController(QWidget):
         self.get_current_z_depth()
         self.toggle_shutter3ph()
 
+        nx_preview=int(self.lineEdit_nx.text())
+        ny_preview=int(self.lineEdit_ny.text())
+        width=float(self.lineEdit_width.text())
+        height=float(self.lineEdit_height.text())
+
+
         # Loop over points by using the aoDoneSignal, start the first point manually
         self.i_po2_point = -1
         self.galvo_gate_task.po2_task.signal_helper.aoDoneSignal.connect(self.next3PPO2Point)
+        
+        if self.checkBox_enable_save.isChecked():
+            #if(self.i_po2_point>0):
+            #   print('stop saving...')
+            #  self.data_saver.stopSaving()
+            # self.ai_task.removeDataConsumer(self.data_saver)
+                
+            print('in save...')
+            self.data_saver=DataSaver(self.save_filename)
+            self.mouseName=self.lineEdit_mouse_name.text()
+            self.scanType = '3P-po2plot'      
+            self.pathRoot = posixpath.join('/',self.mouseName,self.scanDate,self.scanType)
+            self.po2PlotNumber = self.data_saver.checkAlreadyExistingFiles(self.pathRoot,self.scanType)
+            self.lineEdit_po2plot_acq.setText(str(self.po2PlotNumber))
+            self.scanNumber = self.scanType+'_'+str(self.po2PlotNumber) 
+            self.pathName = posixpath.join(self.pathRoot,self.scanNumber)
+            self.data_saver.setDatasetName(self.pathName) 
+            #self.data_saver.addAttribute('meas num:',self.i_po2_point+1)  
+            self.data_saver.addAttribute('total meas num:',self.po2_x_positions.shape[0])  
+            self.data_saver.addAttribute('x_pos',self.po2_x_positions)            
+            self.data_saver.addAttribute('y_pos',self.po2_y_positions)              
+            self.data_saver.addAttribute('depth',self.currentZPos)
+            self.data_saver.addAttribute('x_FOV_center',self.currentXPos)
+            self.data_saver.addAttribute('y_FOV_center',self.currentYPos)
+            self.data_saver.addAttribute('last live scan:',self.liveScanNumber)
+            self.data_saver.addAttribute('last stack acq:',self.stackNumber)
+            self.data_saver.addAttribute('galvo. gate offset:',offset)
+            self.data_saver.addAttribute('amplitude voltage GALVO:',voltage_on)
+            self.data_saver.addAttribute('freq acq. PO2 [Hz]:',self.freqPO2)
+            self.data_saver.addAttribute('width',width)
+            self.data_saver.addAttribute('height',height)                 
+            self.data_saver.addAttribute('nx',nx_preview)
+            self.data_saver.addAttribute('ny',ny_preview)  
+            self.data_saver.addAttribute('galvo_freq',galvo_freq)       
+            self.data_saver.addAttribute('n_averages',n_averages)
+            self.comment=(self.lineEdit_comment.text())
+            self.data_saver.addAttribute('comment',self.comment)
+            
+ 
+                
+            self.data_saver.setBlockSize(512)          
+            self.ai_task.setDataConsumer(self.data_saver,True,0,'save',True)
+            self.ai_task.setDataConsumer(self.data_saver,True,1,'save',True)
+            self.data_saver.startSaving()        
+        self.viewerPO2.initPO2Calculation(self.checkBox_PO2_fitData.isChecked())
+        
+        if (self.checkBox_PO2_fitData.isChecked()):
+            lowBoundary=10
+            upBoundary=80
+        else:
+            lowBoundary=17
+            upBoundary=150    
+        self.label_PO2_lowBoundary.setText(str(lowBoundary))
+        self.label_PO2_upperBoundary.setText(str(upBoundary))
+        
+        temperature=float(self.lineEdit_n_po2_temperature.text())
+        self.po2viewer.initCalculation(self.freqPO2,self.checkBox_PO2_fitData.isChecked(),temperature)
+        val=int(self.lineEdit_po2_3P_display.text())
+        self.po2viewer.shiftDisplay(1,val)
+        
         self.next3PPO2Point()
   
     @pyqtSlot()       
@@ -829,6 +1052,13 @@ class GalvosController(QWidget):
         #self.pushButton_shutter_2ph.setText('Shutter 2Ph: Closed')        
         print('in next point!')
         self.i_po2_point = self.i_po2_point+1
+        print(self.i_po2_point)
+        if (self.i_po2_point>1):
+            estPO2=self.po2viewer.getEstimationPO2()
+            self.viewerPO2.characPoint(self.i_po2_point-2,estPO2)
+            self.viewerPO2.highlightPoint(self.i_po2_point)
+        else:
+            self.viewerPO2.highlightPointAll(self.i_po2_point)
         if(self.i_po2_point < self.po2_x_positions.shape[0]):
             #    Start acquisition task averaging doing a finite ao task reapeated n average times
             #    Show in a plot the Decay curve
@@ -836,39 +1066,49 @@ class GalvosController(QWidget):
             print('PO2 measurement: ' + str(self.i_po2_point+1) + ' out of ' + str(self.po2_x_positions.shape[0]))
             print(str(self.po2_x_positions[self.i_po2_point])+';'+str(self.po2_y_positions[self.i_po2_point]))
             #
-
-            if self.checkBox_enable_save.isChecked():
-                if(self.i_po2_point>0):
-                    print('stop saving...')
-                    self.data_saver.stopSaving()
-                    self.ai_task.removeDataConsumer(self.data_saver)
-                
-                print('in save...')
-                self.data_saver=DataSaver(self.save_filename)
-                self.mouseName=self.lineEdit_mouse_name.text()
-                self.scanType = 'po2plot'      
-                self.pathRoot = posixpath.join('/',self.mouseName,self.scanDate,self.scanType)
-                self.po2PlotNumber = self.data_saver.checkAlreadyExistingFiles(self.pathRoot,self.scanType)
-                self.lineEdit_po2plot_acq.setText(str(self.po2PlotNumber))
-                self.scanNumber = self.scanType+'_'+str(self.po2PlotNumber) 
-                self.pathName = posixpath.join(self.pathRoot,self.scanNumber)
-                self.data_saver.setDatasetName(self.pathName) 
-                self.data_saver.addAttribute('meas num:',self.i_po2_point+1)  
-                self.data_saver.addAttribute('total meas num:',self.po2_x_positions.shape[0])  
-                self.data_saver.addAttribute('x_pos',self.po2_x_positions[self.i_po2_point])            
-                self.data_saver.addAttribute('y_pos',self.po2_y_positions[self.i_po2_point])              
-                self.data_saver.addAttribute('depth',self.currentZPos)
-                self.data_saver.addAttribute('x_FOV_center',self.currentXPos)
-                self.data_saver.addAttribute('y_FOV_center',self.currentYPos)
-                self.data_saver.addAttribute('last live scan:',self.liveScanNumber)
-                self.data_saver.setBlockSize(512)          
-                self.ai_task.setDataConsumer(self.data_saver,True,0,'save',True)
-                self.ai_task.setDataConsumer(self.data_saver,True,1,'save',True)
-                self.data_saver.startSaving()
+#             if self.checkBox_enable_save.isChecked():
+#                 if(self.i_po2_point>0):
+#                     print('stop saving...')
+#                     self.data_saver.stopSaving()
+#                     self.ai_task.removeDataConsumer(self.data_saver)
+#                 
+#                 print('in save...')
+#                 self.data_saver=DataSaver(self.save_filename)
+#                 self.mouseName=self.lineEdit_mouse_name.text()
+#                 self.scanType = 'po2plot'      
+#                 self.pathRoot = posixpath.join('/',self.mouseName,self.scanDate,self.scanType)
+#                 self.po2PlotNumber = self.data_saver.checkAlreadyExistingFiles(self.pathRoot,self.scanType)
+#                 self.lineEdit_po2plot_acq.setText(str(self.po2PlotNumber))
+#                 self.scanNumber = self.scanType+'_'+str(self.po2PlotNumber) 
+#                 self.pathName = posixpath.join(self.pathRoot,self.scanNumber)
+#                 self.data_saver.setDatasetName(self.pathName) 
+#                 self.data_saver.addAttribute('meas num:',self.i_po2_point+1)  
+#                 self.data_saver.addAttribute('total meas num:',self.po2_x_positions.shape[0])  
+#                 self.data_saver.addAttribute('x_pos',self.po2_x_positions[self.i_po2_point])            
+#                 self.data_saver.addAttribute('y_pos',self.po2_y_positions[self.i_po2_point])              
+#                 self.data_saver.addAttribute('depth',self.currentZPos)
+#                 self.data_saver.addAttribute('x_FOV_center',self.currentXPos)
+#                 self.data_saver.addAttribute('y_FOV_center',self.currentYPos)
+#                 self.data_saver.addAttribute('last live scan:',self.liveScanNumber)
+#                 self.data_saver.addAttribute('last stack acq:',self.stackNumber)
+#                 self.data_saver.addAttribute('gate on [us]:',self.gate_on_2P_PO2)
+#                 self.data_saver.addAttribute('gate off [us]:',self.gate_off_2P_PO2)
+#                 self.data_saver.addAttribute('amplitude voltage ON:',self.voltage_on_2P_PO2)
+#                 self.data_saver.addAttribute('freq acq. PO2 [Hz]:',self.freq_2P_PO2)
+#                 self.data_saver.addAttribute('n averages:',self.n_averages_2P_PO2)
+#                 self.data_saver.addAttribute('width',width)
+#                 self.data_saver.addAttribute('height',height)                 
+#                 self.data_saver.addAttribute('nx',nx_preview)
+#                 self.data_saver.addAttribute('ny',ny_preview)         
+#                 
+#                 self.data_saver.setBlockSize(512)          
+#                 self.ai_task.setDataConsumer(self.data_saver,True,0,'save',True)
+#                 self.ai_task.setDataConsumer(self.data_saver,True,1,'save',True)
+#                 self.data_saver.startSaving()
             #
             self.galvos.moveOnDemand(self.po2_x_positions[self.i_po2_point], self.po2_y_positions[self.i_po2_point])
             #self.toggle_shutter2ph()
-            time.sleep(0.5)
+            time.sleep(0.2)
             self.eom_task.writeOnce()
             self.eom_task.start()
         else:
@@ -878,7 +1118,7 @@ class GalvosController(QWidget):
             #self.pushButton_shutter_2ph.setStyleSheet("background-color: pale gray");
             #self.pushButton_shutter_2ph.setText('Shutter 2Ph: Closed')
             self.toggle_shutter2ph() 
-            time.sleep(0.5)
+            time.sleep(0.1)
             self.eom_task.close()
             self.galvos.ao_task.StopTask()
             self.galvos.ao_task.ClearTask()
@@ -910,41 +1150,44 @@ class GalvosController(QWidget):
         print('in next point!')
         time.sleep(0.5)
         self.i_po2_point = self.i_po2_point+1
+        self.viewerPO2.highlightPointAll(self.i_po2_point)
+
         if(self.i_po2_point < self.po2_x_positions.shape[0]):
             #    Start acquisition task averaging doing a finite ao task reapeated n average times
             #    Show in a plot the Decay curve
             #   Should remove these prints once we know it works. No need to update viewer anymore
             print('PO2 measurement: ' + str(self.i_po2_point+1) + ' out of ' + str(self.po2_x_positions.shape[0]))
             print(str(self.po2_x_positions[self.i_po2_point])+';'+str(self.po2_y_positions[self.i_po2_point]))
-            
-            if self.checkBox_enable_save.isChecked():
-                if(self.i_po2_point>0):
-                    print('stop saving...')
-                    self.data_saver.stopSaving()
-                    self.ai_task.removeDataConsumer(self.data_saver)
-                
-                print('in save...')
-                self.data_saver=DataSaver(self.save_filename)
-                self.mouseName=self.lineEdit_mouse_name.text()
-                self.scanType = '3P-po2plot'      
-                self.pathRoot = posixpath.join('/',self.mouseName,self.scanDate,self.scanType)
-                self.po2PlotNumber = self.data_saver.checkAlreadyExistingFiles(self.pathRoot,self.scanType)
-                self.lineEdit_po2plot_acq.setText(str(self.po2PlotNumber))
-                self.scanNumber = self.scanType+'_'+str(self.po2PlotNumber) 
-                self.pathName = posixpath.join(self.pathRoot,self.scanNumber)
-                self.data_saver.setDatasetName(self.pathName) 
-                self.data_saver.addAttribute('meas num:',self.i_po2_point+1)  
-                self.data_saver.addAttribute('total meas num:',self.po2_x_positions.shape[0])  
-                self.data_saver.addAttribute('x_pos',self.po2_x_positions[self.i_po2_point])            
-                self.data_saver.addAttribute('y_pos',self.po2_y_positions[self.i_po2_point])              
-                self.data_saver.addAttribute('depth',self.currentZPos)
-                self.data_saver.addAttribute('x_FOV_center',self.currentXPos)
-                self.data_saver.addAttribute('y_FOV_center',self.currentYPos)
-                self.data_saver.addAttribute('last live scan:',self.liveScanNumber)
-                self.data_saver.setBlockSize(512)          
-                self.ai_task.setDataConsumer(self.data_saver,True,0,'save',True)
-                self.ai_task.setDataConsumer(self.data_saver,True,1,'save',True)
-                self.data_saver.startSaving()            
+           
+#             if self.checkBox_enable_save.isChecked():
+#                 if(self.i_po2_point>0):
+#                     print('stop saving...')
+#                     self.data_saver.stopSaving()
+#                     self.ai_task.removeDataConsumer(self.data_saver)
+#                 
+#                 print('in save...')
+#                 self.data_saver=DataSaver(self.save_filename)
+#                 self.mouseName=self.lineEdit_mouse_name.text()
+#                 self.scanType = '3P-po2plot'      
+#                 self.pathRoot = posixpath.join('/',self.mouseName,self.scanDate,self.scanType)
+#                 self.po2PlotNumber = self.data_saver.checkAlreadyExistingFiles(self.pathRoot,self.scanType)
+#                 self.lineEdit_po2plot_acq.setText(str(self.po2PlotNumber))
+#                 self.scanNumber = self.scanType+'_'+str(self.po2PlotNumber) 
+#                 self.pathName = posixpath.join(self.pathRoot,self.scanNumber)
+#                 self.data_saver.setDatasetName(self.pathName) 
+#                 self.data_saver.addAttribute('meas num:',self.i_po2_point+1)  
+#                 self.data_saver.addAttribute('total meas num:',self.po2_x_positions.shape[0])  
+#                 self.data_saver.addAttribute('x_pos',self.po2_x_positions[self.i_po2_point])            
+#                 self.data_saver.addAttribute('y_pos',self.po2_y_positions[self.i_po2_point])              
+#                 self.data_saver.addAttribute('depth',self.currentZPos)
+#                 self.data_saver.addAttribute('x_FOV_center',self.currentXPos)
+#                 self.data_saver.addAttribute('y_FOV_center',self.currentYPos)
+#                 self.data_saver.addAttribute('last live scan:',self.liveScanNumber)
+#                 self.data_saver.addAttribute('last stack acq:',self.stackNumber)
+#                 self.data_saver.setBlockSize(512)          
+#                 self.ai_task.setDataConsumer(self.data_saver,True,0,'save',True)
+#                 self.ai_task.setDataConsumer(self.data_saver,True,1,'save',True)
+#                 self.data_saver.startSaving()            
 
             self.galvos.moveOnDemand(self.po2_x_positions[self.i_po2_point], self.po2_y_positions[self.i_po2_point])
             time.sleep(0.5)
@@ -959,7 +1202,7 @@ class GalvosController(QWidget):
             #self.pushButton_shutter_3ph.setStyleSheet("background-color: pale gray");
             #self.pushButton_shutter_3ph.setText('Shutter 3Ph: Closed') 
             self.toggle_shutter3ph()
-            time.sleep(0.5)
+            time.sleep(0.2)
             
             self.setGalvoToPos3P(0)
 
@@ -1311,21 +1554,32 @@ class GalvosController(QWidget):
         linescan_px_x_1, linescan_px_y_1, linescan_px_x_2, linescan_px_y_2, linescan_length_px = self.viewer.getMouseSelectedLinePosition()
         print(str(linescan_px_x_1))
         nx=int(self.lineEdit_nx.text())   
-        ny=int(self.lineEdit_ny.text())   
+        ny=int(self.lineEdit_ny.text())
+        nextra=int(self.lineEdit_extrapoints.text())
         width=float(self.lineEdit_width.text())          
         height=float(self.lineEdit_height.text())      
         
+        height_forOCT=height*(nextra+ny)/ny
+        
+        
         linescan_x_1_um=linescan_px_x_1/nx*width
         linescan_x_2_um=linescan_px_x_2/nx*width
-        linescan_y_1_um=linescan_px_y_1/ny*height
-        linescan_y_2_um=linescan_px_y_2/ny*height
+        linescan_y_1_um=linescan_px_y_1/(nextra+ny)*height
+        linescan_y_2_um=linescan_px_y_2/(nextra+ny)*height
+
+        linescan_y_1_um_forOCT=linescan_px_y_1/(nextra+ny)*height_forOCT
+        linescan_y_2_um_forOCT=linescan_px_y_2/(nextra+ny)*height_forOCT
         
         center_x=(linescan_x_2_um+linescan_x_1_um)/2-width/2
         center_y=(linescan_y_2_um+linescan_y_1_um)/2-height/2
+ 
+        center_y_forOCT=(linescan_y_2_um_forOCT+linescan_y_1_um_forOCT)/2-height/2
+        
+        print('LINE: position: '+str(center_x)+','+str(center_y))
         
         linescan_width = math.sqrt(math.pow((linescan_x_2_um-linescan_x_1_um),2)+math.pow((linescan_y_2_um-linescan_y_1_um),2))
         
-        strCoord=str(center_x)+'/'+str(center_y) +'/'+str(self.lineScanNumber+1)
+        strCoord=str(center_x)+'/'+str(center_y_forOCT) +'/'+str(self.lineScanNumber+1)
             
         txtCoord = open(r"C:\git-projects\multiphoton\coordinates.txt","w") 
         txtCoord.write(strCoord)
@@ -1429,7 +1683,7 @@ class GalvosController(QWidget):
             print ('Laser shutter open...')
             self.maitai.SHUTTERopen()
             self.maitaiShutter_closed = False
-            self.pushButton_maitaiShutter.setStyleSheet("background-color: red");
+            self.pushButton_maitaiShutter.setStyleSheet("background-color: red")
             self.pushButton_maitaiShutter.setText('Maitai Shutter: OPEN')
         else:
             print ('Laser shutter closed...')
@@ -1875,7 +2129,8 @@ class GalvosController(QWidget):
         ny_preview=int(self.lineEdit_ny.text())
         width=float(self.lineEdit_width.text())
         height=float(self.lineEdit_height.text())
-        
+
+                    
         self.linescan_shift_x=float(self.horizontalScrollBar_line_scan_shift_x.value())
         x_0_px=x_0_px+self.linescan_shift_x
         x_e_px=x_e_px+self.linescan_shift_x
@@ -2191,6 +2446,7 @@ class GalvosController(QWidget):
             self.data_saver.addAttribute('line_rate',line_rate)   
             self.data_saver.addAttribute('scantype',self.comboBox_scantype.currentText())  
             self.data_saver.addAttribute('depth',currentdepth)
+            self.comment=(self.lineEdit_comment.text())
                 
             self.data_saver.setBlockSize(512)          
             self.ai_task.setDataConsumer(self.data_saver,True,0,'save',True)

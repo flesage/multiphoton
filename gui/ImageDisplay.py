@@ -15,6 +15,8 @@ from vasc_seg.ScanLines import ScanLines
 import scipy.io as sio
 from PIL import Image
 from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot
+from scipy.optimize import curve_fit
+
 #from matplotlib import pyplot as plt
 
 
@@ -88,20 +90,219 @@ class po2Viewer(Queue.Queue):
         
         Queue.Queue.__init__(self,2)
         
-        self.po2plot = pg.PlotWidget(None)
-        self.po2plot.setWindowTitle(name)
-        self.po2plot.plot(title=name)
-        self.po2plot.setTitle(name)
-        self.po2plot.setLabel('left', text='Intensity')
-        self.po2plot.setLabel('bottom', text='Time [usec]')
-        self.normFlag=0
-        self.logFlag=0
-        self.po2plot.resize(650, 450)
-        self.po2plot.move(1200, 500)
-        self.previousTracesFlag=False
-        self.storedData=np.zeros((100,1))
         
+        self.PO2canvas = pg.GraphicsLayoutWidget()
+        self.PO2canvas.setWindowTitle('PO2 viewer')
+        self.PO2AbsCurve = self.PO2canvas.addPlot(row=0,col=0)
+        self.PO2AbsCurve.setTitle('Absolute PO2 curve')
+        self.PO2AbsCurve.setLabel('left', text='Abs. Intensity')
+        self.PO2AbsCurve.setLabel('bottom', text='Time [usec]')
+                
+        self.PO2NormCurve = self.PO2canvas.addPlot(row=0,col=1)
+        self.PO2NormCurve.setTitle('Normalized PO2 curve')
+        self.PO2NormCurve.setLabel('left', text='Norm. Intensity')
+        self.PO2NormCurve.setLabel('bottom', text='Time [usec]')        
+        
+        self.PO2LogNormCurve = self.PO2canvas.addPlot(row=1,col=0)
+        self.PO2LogNormCurve.setTitle('Log PO2 curve')
+        self.PO2LogNormCurve.setLabel('left', text='Log. Norm. Intensity')
+        self.PO2LogNormCurve.setLabel('bottom', text='Time [usec]')        #self.po2plot = pg.PlotWidget(None)
+        
+        self.PO2FFTCurve = self.PO2canvas.addPlot(row=1,col=1)
+        self.PO2FFTCurve.setTitle('FFT PO2 curve')
+        self.PO2FFTCurve.setLabel('left', text='20 log FFT')
+        self.PO2FFTCurve.setLabel('bottom', text='Freq [kHz]')  
+        #self.po2plot.setWindowTitle(name)
+        #self.po2plot.plot(title=name)
+        #self.po2plot.setTitle(name)
+        #self.po2plot.setLabel('left', text='Intensity')
+        #self.po2plot.setLabel('bottom', text='Time [usec]')
+        #self.normFlag=0
+        #self.logFlag=0
+        #self.po2plot.resize(650, 450)
+        self.PO2canvas.move(1200, 500)
+        self.previousTracesFlag=False
+        self.shiftFlag=0
+    
+    def update(self):
+        try:
+            #print('getting data...')
+            data = self.get(False)
+            self.counter=self.counter+1
+            #averageDecayCurve=np.mean(data,2)
+            #x=np.linspace(0,data/(1e6),data.shape[0])
+            print('data size:'+str(data.shape))
+            data_to_plot=-np.reshape(data, (self.numAverages,-1))
+            print('data_to_plot size:'+str(data_to_plot.shape))
+            #data=-data
+            data_to_plot=np.mean(data_to_plot,0)  
+            self.storedData[:,0]=data_to_plot
+            self.clearPlot()
+                      
+            #if self.normFlag == 1:
+            #    data=data-np.min(data)
+            #    data=data/np.max(data)
+            #if self.logFlag == 1:
+            #    self.po2plot.plot(self.xAxis,np.log(data+1),pen=pg.mkPen('w', width=3))
+                #self.storedData[:,self.counter]=np.log(data+1)
+            #else:    
+            #self.po2plot.plot(self.xAxis,data+1,pen=pg.mkPen('w', width=3))
+            
+            data_to_log=data_to_plot+1-np.min(data_to_plot)
+            
+            logTemp=np.log(data_to_log)
+            logTemp=logTemp-np.min(logTemp)
+            self.LogData[:,0]=logTemp/np.max(logTemp)
+            
+            self.normData[:,0]=data_to_plot-np.min(data_to_plot)
+            self.normData[:,0]=self.normData[:,0]/np.max(self.normData[:,0])  
+            
+            if (self.shiftFlag==1):
+                self.normData[:,0]=np.roll(self.normData[:,0],self.shiftVal,axis=0)
+                self.LogData[:,0]=np.roll(self.LogData[:,0],self.shiftVal,axis=0)
+                self.storedData[:,0]=np.roll(self.storedData[:,0],self.shiftVal,axis=0)
+            
+            dataToFFT=self.normData[:,0]
+            n = len(dataToFFT)
+            k = np.arange(n)
+            T = n/self.PO2Acqfreq
+            frq = k/T # two sides frequency range
+            frq = frq[range(int(n/2))]/1000 # one side frequency range
+            FFTData = np.fft.fft(dataToFFT)/n # fft computing and normalization
+            self.FFTData[:,0] = 20*np.log(abs(FFTData[range(int(n/2))]))
+
+            shapeTemp=self.storedData.shape
+            shape=shapeTemp[-1]
+            if (self.previousTracesFlag==0):
+                shape=self.counter+1
+                if ((self.counter+1)>=shapeTemp[-1]):
+                    shape=shapeTemp[-1]
+            
+            for i in range(shape-1):
+                self.PO2AbsCurve.plot(self.xAxis,self.storedData[:,i+1],pen=pg.mkPen(0.3, width=1))
+                self.PO2NormCurve.plot(self.xAxis,self.normData[:,i+1],pen=pg.mkPen(0.3, width=1))
+                self.PO2LogNormCurve.plot(self.xAxis,self.LogData[:,i+1],pen=pg.mkPen(0.3, width=1))
+                self.PO2FFTCurve.plot(frq,self.FFTData[:,i+1],pen=pg.mkPen(0.3, width=1))
+                
+            self.PO2AbsCurve.plot(self.xAxis,self.storedData[:,0],pen=pg.mkPen('w', width=3))      
+            self.PO2NormCurve.plot(self.xAxis,self.normData[:,0],pen=pg.mkPen('w', width=3))
+            self.PO2LogNormCurve.plot(self.xAxis,self.LogData[:,0],pen=pg.mkPen('w', width=3))
+            self.PO2FFTCurve.plot(frq,self.FFTData[:,0],pen=pg.mkPen('w', width=3))
+
+            valueMaxCurve = np.amax(self.storedData[:,0])
+            
+            sortedCurve=np.sort(self.storedData[:,0])
+            
+            
+            background = np.mean(sortedCurve[0:10])
+            signalRange=valueMaxCurve-background
+            # Get the indices of maximum element in numpy array
+            positionMaxCurve = np.where(self.storedData[:,0] == valueMaxCurve)
+            
+            print('Position of peak: ', positionMaxCurve[0])
+            print('Background :', background)
+            print('Max value :', valueMaxCurve)
+            print('Signal range :', signalRange)
+
+
+            if (self.estimatePO2==1):
+                print('real time fit...')
+                if (self.shiftFlag==0):
+                    data=self.storedData[15:,0]
+                elif(self.shiftFlag==1):
+                    data=self.storedData[15-3:,0]
+                    
+                time=np.arange(0,data.shape[0])/self.PO2Acqfreq
+                popt, pcov = curve_fit(self.decay, time, data, p0=(np.max(data), 20e-6, np.min(data)))
+                self.po2_values.append(self.po2FromModel(popt[1],self.temperature))   
+                print('PO2 values:'+str(self.po2_values[-1]))            
+            else:
+                X=np.linspace(0,len(self.LogData[:,0]),len(self.LogData[:,0]))
+                self.po2_values.append(self.FWHM(X,self.LogData[:,0]))
+                print('FWHM:'+str(self.po2_values[-1]))             
+
+
+            #estimate = self.decay(time, *popt)
+
+            print('rolling...')
+            self.LogData=np.roll(self.LogData,1,axis=1)
+            self.normData=np.roll(self.normData,1,axis=1)
+            self.storedData=np.roll(self.storedData,1,axis=1)
+            self.FFTData=np.roll(self.FFTData,1,axis=1)
+
+
+
+                #self.storedData[:,self.counter]=data+1
+            #print('data plotted!')
+            #- pour direct
+        except Queue.Empty:
+            # Ignore and preserve previous state of display
+            pass        
+        #self.Scene.sigMouseClicked.connect(self.mouseMove   
+
+    def shiftDisplay(self,flag,val):
+        self.shiftFlag=flag
+        self.shiftVal=val
+
+    def initCalculation(self,freq,fitFlag,temperature):
+        self.po2_values=[]
+        self.PO2Acqfreq=freq
+        self.estimatePO2=fitFlag
+        self.temperature=temperature
+  
+    def getPO2Val(self):
+        return self.po2_values
+
+    def decay(self,x, a, b, c):
+        return a*np.exp(-x/b)+c
+
+    def po2FromLifetime(self,tau):
+        po2=560.895978350844*np.exp(-tau/4.390936102e-6)+158.7250245*np.exp(-tau/1.811680492e-5)-18.832277451
+        return po2
+    
+    def po2FromModel(self,tau,T):
+        p=1.265776950
+        a=14.8
+        kq=91.01153
+        beta=19.43017
+        tau0=3.8e-5
+        print('*** tau:'+str(tau))
+        po2=(1./(kq+beta*T))*(1./(a*(tau**p))-1./tau0)
+        print('*** po2:'+str(po2))
+        return po2
+    
+    def po2FromModelComplexe(self,tau,T):
+        p=1.265776950 
+        a=14.8
+        kq=106.1337
+        beta=18.89122
+        tau0=3.96441e-5
+        alpha=-5.94517e-8
+        print('*** tau:'+str(tau))
+        po2=(1./(kq+beta*T))*(1./(a*(tau**p))-1./(tau0+alpha*T))
+        print('*** po2:'+str(po2))
+        return po2
+    
+        
+    def getEstimationPO2(self):
+        return self.po2_values[-1]
+
+    def FWHM(self,X,Y):
+        half_max = 0.2
+        #find when function crosses line half_max (when sign of diff flips)
+        #take the 'derivative' of signum(half_max - Y[])
+        d = np.sign(half_max - np.array(Y[0:-1])) - np.sign(half_max - np.array(Y[1:]))
+        #plot(X[0:len(d)],d) #if you are interested
+        #find the left and right most indexes
+        left_idx = np.where(d > 0)[0]
+        right_idx = np.where(d < 0)[-1]
+        fwhm=X[right_idx] - X[left_idx] #return the difference (full width)
+        print('FWHM')
+        print(fwhm[0])
+        return fwhm[0]
+    
     def showPreviousTraces(self,flag):
+        print('Show previous traces: '+str(flag))
         self.previousTracesFlag=flag
         
     def getAcquisitionParameters(self,numAverages,gate_on,gate_off,freqPO2):
@@ -114,51 +315,31 @@ class po2Viewer(Queue.Queue):
         
     def getAcquisitionParameters3P(self,numAverages,freq_galvo,freqPO2):
         self.numAverages=numAverages
-        self.numPoints=(1/freq_galvo)*freqPO2
+        self.numPoints=(1/freq_galvo)*freqPO2/2
         self.timeResolution=1/freqPO2
-        self.xAxis=np.arange(0,self.numPoints*self.timeResolution,self.timeResolution)
+        self.xAxis=np.arange(0,(self.numPoints)*self.timeResolution,self.timeResolution)
+        self.xAxis=self.xAxis[0:-1]
         
     def showPlot(self):
-        self.po2plot.show()
+        self.PO2canvas.show()
         
     def clearPlot(self):
-        self.po2plot.clear()
+        self.PO2AbsCurve.clear()
+        self.PO2NormCurve.clear()
+        self.PO2LogNormCurve.clear()
+        self.PO2FFTCurve.clear()
         
     def initPlot(self,numAcquisitions):
         self.counter=-1
         self.clearPlot()
-        if self.previousTracesFlag:
-            self.po2plot.plot(self.xAxis,self.storedData,pen=pg.mkPen(0.5, width=2))
-        self.storedData=np.zeros((self.numPoints,numAcquisitions))
-
-    def update(self):
-        try:
-            #print('getting data...')
-            data = self.get(False)
-            #averageDecayCurve=np.mean(data,2)
-            #x=np.linspace(0,data/(1e6),data.shape[0])
-            data_to_plot=-np.reshape(data, (self.numAverages,-1))
-            print(data_to_plot.shape)
-            #data=-data
-            data_to_plot=np.mean(data_to_plot,0)            
-            #if self.normFlag == 1:
-            #    data=data-np.min(data)
-            #    data=data/np.max(data)
-            #if self.logFlag == 1:
-            #    self.po2plot.plot(self.xAxis,np.log(data+1),pen=pg.mkPen('w', width=3))
-                #self.storedData[:,self.counter]=np.log(data+1)
-            #else:    
-            #self.po2plot.plot(self.xAxis,data+1,pen=pg.mkPen('w', width=3))
-            self.po2plot.plot(data_to_plot,pen=pg.mkPen('w', width=3))
+        numPoints=int(round(self.numPoints))
             
-                #self.storedData[:,self.counter]=data+1
-            #print('data plotted!')
-            #- pour direct
-        except Queue.Empty:
-            # Ignore and preserve previous state of display
-            pass        
-        #self.Scene.sigMouseClicked.connect(self.mouseMove   
-     
+        if (self.previousTracesFlag==0):
+            self.storedData=np.zeros((numPoints,int(numAcquisitions)))
+            self.normData=np.zeros((numPoints,int(numAcquisitions)))
+            self.LogData=np.zeros((numPoints,int(numAcquisitions)))
+            self.FFTData=np.zeros((int(numPoints/2),int(numAcquisitions)))
+            
 
 class CurrentLineViewer(Queue.Queue):
 
@@ -241,6 +422,22 @@ class ChannelViewer(Queue.Queue):
         self.levelFlag=True
         self.averageOn=False
         self.scanningType='SawTooth'
+        self.parula=np.array([[0.2081,0.21056,0.21215,0.21235,0.21074,0.20655,0.19887,0.1865,0.16753,0.1403,0.1025,0.059133,0.022355,0.0073394,0.0054788,0.010618,0.019227,0.029709,0.040964,0.051176,0.059745,0.066809,0.072267,0.076391,0.078773,0.079421,0.07783,0.0734,0.066412,0.057352,0.047336,0.037745,0.030809,0.0265,0.024512,0.02367,0.023155,0.022839,0.023139,0.025373,0.030697,0.040027,0.052655,0.067673,0.0843,0.10242,0.12178,0.14229,0.16397,0.18679,0.21078,0.236,0.26247,0.29006,0.31872,0.34817,0.37811,0.40817,0.43785,0.46686,0.49509,0.52245,0.54884,0.57447,0.59945,0.62365,0.6473,0.67042,0.6931,0.71528,0.73715,0.75859,0.77983,0.80074,0.82145,0.84194,0.86228,0.88243,0.90249,0.92243,0.94216,0.96128,0.97853,0.99135,0.99777,0.99901,0.99698,0.99313,0.988,0.98224,0.97632,0.97047,0.96545,0.96165,0.95924,0.95867,0.9602,0.96384,0.96956,0.9763],[0.1663,0.18124,0.19629,0.21156,0.22718,0.24324,0.25971,0.27661,0.29462,0.31475,0.33749,0.35983,0.37858,0.39372,0.40688,0.4187,0.42967,0.44015,0.45018,0.45997,0.46961,0.47914,0.48867,0.49832,0.50821,0.51852,0.52937,0.54096,0.55331,0.56618,0.57904,0.59147,0.60302,0.6137,0.62347,0.6324,0.64065,0.64828,0.65547,0.66228,0.66887,0.67515,0.68122,0.68714,0.69283,0.69841,0.70382,0.70902,0.71411,0.719,0.72372,0.72812,0.7323,0.73612,0.73951,0.74243,0.74479,0.74659,0.7479,0.74869,0.7491,0.74919,0.74893,0.74842,0.74765,0.74673,0.7456,0.74431,0.74291,0.74136,0.73969,0.73788,0.73608,0.73428,0.73248,0.73067,0.72895,0.72743,0.72624,0.7256,0.72593,0.72806,0.73322,0.74223,0.75418,0.76719,0.78043,0.79355,0.8066,0.81964,0.83277,0.84619,0.86013,0.87476,0.89026,0.9068,0.92444,0.94316,0.96281,0.9831],[0.5292,0.55991,0.59103,0.62245,0.65426,0.68628,0.71863,0.75108,0.78396,0.81675,0.84688,0.86833,0.87932,0.88299,0.88306,0.8809,0.87756,0.87328,0.86847,0.86332,0.85782,0.8523,0.8467,0.84132,0.83625,0.83177,0.82804,0.82566,0.82425,0.82349,0.82266,0.82102,0.81796,0.8135,0.80766,0.80055,0.79247,0.78351,0.77396,0.76374,0.75307,0.74193,0.73046,0.71846,0.70617,0.69335,0.68018,0.66658,0.65266,0.63829,0.62353,0.60855,0.59326,0.57781,0.56245,0.54727,0.53254,0.51848,0.50519,0.49255,0.48065,0.46928,0.45837,0.44794,0.43798,0.42823,0.4188,0.40958,0.40057,0.39173,0.38297,0.37431,0.36575,0.3572,0.34854,0.33978,0.33087,0.3217,0.31205,0.30176,0.29041,0.27736,0.26204,0.24512,0.22885,0.21443,0.20178,0.19012,0.17937,0.16905,0.15901,0.14892,0.13862,0.12775,0.11655,0.10499,0.093118,0.080927,0.068094,0.0538]])
+
+    def initPO2Calculation(self,calcFlag):
+        self.estimatePO2=calcFlag
+        if (self.estimatePO2==1):
+            self.lowBoundary=10
+            self.upperBoundary=80
+        else:
+            self.lowBoundary=17
+            self.upperBoundary=150            
+
+    def setAutoLevels(self):
+        self.imv.autoLevels()
+        
+    def setAutoRange(self):
+        self.imv.autoRange()       
         
     def setGalvoController(self,galvo_controller):
         self.galvo_controller=galvo_controller
@@ -435,6 +632,47 @@ class ChannelViewer(Queue.Queue):
                         line.setPen('b',width=7)
                     else:
                         line.setPen('y',width=7)
+                        
+    def highlightPoint(self,selectedPoint):
+        counter=0
+        if len(self.points)>0:
+            for selPoint in self.points:
+                if counter==selectedPoint:
+                    selPoint.setPen('w',width=4.5)
+                #else:
+                    #selPoint.setPen('r',width=4.5)
+                counter=counter+1
+
+    def highlightPointAll(self,selectedPoint):
+        counter=0
+        if len(self.points)>0:
+            for selPoint in self.points:
+                if counter==selectedPoint:
+                    selPoint.setPen('y',width=4.5)
+                else:
+                    selPoint.setPen('r',width=4.5)
+                counter=counter+1
+                        
+    def characPoint(self,selectedPoint,val):
+        counter=0
+        val=(val-self.lowBoundary)/(self.upperBoundary-self.lowBoundary)*99
+        val=int(np.round(val))
+        if (val<0):
+            val=0
+        if (val>98):
+            val=99
+        print('val'+str(val))
+        r=self.parula[0,val]*255
+        g=self.parula[1,val]*255
+        b=self.parula[2,val]*255
+            
+        if len(self.points)>0:
+            for selPoint in self.points:
+                if counter==selectedPoint:
+                    selPoint.setPen((r,g,b),width=4.5)
+                elif counter>selectedPoint:
+                    selPoint.setPen('r',width=4.5)
+                counter=counter+1    
 
     def highlightRect(self,selectedRect):
         if len(self.rect)>0:

@@ -125,6 +125,8 @@ if __name__ == '__main__':
     viewer2.setGalvoController(galvos_controller)
     
     galvos_controller.initialize_triangular_display()
+    galvos_controller.defineViewerForPO2()
+    galvos_controller.defineChannelToPlot()
     galvos_controller.show()
 
     

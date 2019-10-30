@@ -1,5 +1,7 @@
 <RCC>
   <qresource prefix="/icons/img">
+    <file>colormap_parula_update17a.png</file>
+    <file>colormap_parula_update17a1.png</file>
     <file>organ.png</file>
     <file>organ.png</file>
     <file>save_icon.png</file>

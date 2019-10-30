@@ -54,6 +54,10 @@ class PO2Acq(object):
         
         #2e5
         
+
+    
+    
+        
     def config(self):
         # First create both channels
         freq=self.freq
