@@ -221,7 +221,9 @@ class po2Viewer(Queue.Queue):
                 print('PO2 values:'+str(self.po2_values[-1]))            
             else:
                 X=np.linspace(0,len(self.LogData[:,0]),len(self.LogData[:,0]))
-                self.po2_values.append(self.FWHM(X,self.LogData[:,0]))
+                tmpFWHM=self.FWHM(X,self.LogData[:,0])
+                print('tmp FWHM:'+str(tmpFWHM))
+                self.po2_values.append(tmpFWHM)
                 print('FWHM:'+str(self.po2_values[-1]))             
 
 
@@ -299,9 +301,14 @@ class po2Viewer(Queue.Queue):
         #find the left and right most indexes
         left_idx = np.where(d > 0)[0]
         right_idx = np.where(d < 0)[-1]
-        fwhm=X[right_idx] - X[left_idx] #return the difference (full width)
+        if (len(left_idx)==0 or len(right_idx)==0):
+            fwhm[0]=0
+        else:
+            fwhm=X[right_idx] - X[left_idx] #return the difference (full width)
         print('FWHM')
-        print(fwhm[0])
+        print(len(fwhm))
+        if len(fwhm)==0:
+            fwhm[0]=0
         return fwhm[0]
     
     def showPreviousTraces(self,flag):

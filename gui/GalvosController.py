@@ -361,7 +361,35 @@ class GalvosController(QWidget):
         self.pushButton_AutoLevels.clicked.connect(self.setAutoLevels)
         self.autoRangeFlag=0
         self.autoLevelsFlag=0
-    #
+        
+        #PO2-LS:
+        self.checkBox_activatePO2LS.clicked.connect(self.toggle_PO2_LS)
+        self.simultaneousPO2LS=False
+        self.horizontalScrollBar_LSPO2Power.valueChanged.connect(self.setPowerPO2_LS)
+        
+        
+    #        
+    def setPowerPO2_LS(self,value):
+        # Input value is 0-100%, needs to be mapped to 0-2V for EOM input
+        self.label_powerPO2LS.setText(str(int(value))+' %')
+    
+    
+    def toggle_PO2_LS(self):
+        print('Toggling PO2-LS...')
+        self.simultaneousPO2LS=self.checkBox_activatePO2LS.isChecked()
+        
+        if self.simultaneousPO2LS:
+            print('...Activating PO2-LS')
+            power2ph=self.horizontalScrollBar_power2ph.value()
+            powerPO2=self.horizontalScrollBar_LSPO2Power.value()
+            on_time = float(self.lineEdit_PO2LS_gate_on.text())
+            powerLS = 2.0*power2ph/100.0
+            powerPO2 = 2.0*powerPO2/100.0
+            self.galvos.setEOMParameters(self.simultaneousPO2LS,config.eom_ao,2e6,powerPO2,powerLS,on_time)
+        else:
+            print('...Deactivating PO2-LS')
+            self.galvos.setEOMFlag(self.simultaneousPO2LS)
+    
     def setAutoRange(self):
         if (self.autoRangeFlag):
             self.pushButton_AutoRange.setText('Auto Range: OFF')
@@ -812,6 +840,7 @@ class GalvosController(QWidget):
         self.ai_task.updateConsumerFlag(self.viewerTxt,False)        
         
         power2ph=self.horizontalScrollBar_power2ph.value()
+        
         self.setPower2ph(0)
         
         print('Starting po2 acquisition:')
@@ -1122,6 +1151,7 @@ class GalvosController(QWidget):
             self.eom_task.close()
             self.galvos.ao_task.StopTask()
             self.galvos.ao_task.ClearTask()
+            self.galvos.config()
             if self.checkBox_enable_save.isChecked():
                 print('stop saving...')
                 self.data_saver.stopSaving()
@@ -1212,6 +1242,8 @@ class GalvosController(QWidget):
             
             self.galvos.ao_task.StopTask()
             self.galvos.ao_task.ClearTask()
+            self.galvos.config()
+
             if self.checkBox_enable_save.isChecked():
                 print('stop saving...')
                 self.data_saver.stopSaving()
@@ -2309,7 +2341,17 @@ class GalvosController(QWidget):
             self.viewer.move_offset_display(shift_display)
             self.viewer2.move_offset_display(shift_display)
             
-            self.galvos.setLineRamp(y_0_um,x_0_um,y_e_um,x_e_um,npts,n_lines,n_extra,line_rate,shift_display)
+            if self.simultaneousPO2LS:
+                [npts,n_extra,n_lines]=self.galvos.setLineRamp(y_0_um,x_0_um,y_e_um,x_e_um,npts,n_lines,n_extra,line_rate,shift_display)
+            else:
+                self.galvos.setLineRamp(y_0_um,x_0_um,y_e_um,x_e_um,npts,n_lines,n_extra,line_rate,shift_display)
+                
+            self.lineEdit_nr.setText(str(npts))
+            self.lineEdit_nt.setText(str(n_lines))
+            self.lineEdit_extrapoints_LS.setText(str(n_extra))
+            
+            
+            
             self.galvos_stopped = False
             self.pushButton_start.setEnabled(False)
     

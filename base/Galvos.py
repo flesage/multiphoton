@@ -64,6 +64,7 @@ class Galvos():
         self.device = device
         self.ao_x = ao_x
         self.ao_y = ao_y
+        self.aomFlag = False    
 
         self.ao_task = None
         self.ai_task = None
@@ -84,7 +85,7 @@ class Galvos():
         self.center_x = 0.0
         self.center_y = 0.0
         self.shift_display = 0
-        self.finite = False      
+        self.finite = False  
     
     def configOnDemand(self):  
         self.ao_task = VoltageOutTask()
@@ -96,12 +97,25 @@ class Galvos():
         data[1]=self.converter.voltY(y)
         self.ao_task.WriteAnalogF64(1,True,-1,DAQmx_Val_GroupByChannel,
                                             data,byref(self.read),None)
+                
+    def setEOMFlag(self,flag):
+        self.aomFlag = flag
+
+    def setEOMParameters(self,flag,ao_eom,daq_freq,powerPO2,powerLS,on_time):
+        self.aomFlag = flag
+        self.daq_freq = daq_freq
+        self.powerPO2 = powerPO2
+        self.powerLS = powerLS
+        self.ao_eom = ao_eom
+        self.gate_on = on_time
         
     def config(self):
         # First create both channels
         self.ao_task = VoltageOutTask()
-        self.ao_task.CreateAOVoltageChan(posixpath.join(self.device,self.ao_x)+','+posixpath.join(self.device,self.ao_y),"Galvos",-10.0,10.0,DAQmx_Val_Volts,None)
-        
+        if self.aomFlag:
+            self.ao_task.CreateAOVoltageChan(posixpath.join(self.device,self.ao_x)+','+posixpath.join(self.device,self.ao_y)+','+posixpath.join(self.device,self.ao_eom),"GalvosWithEOM",-10.0,10.0,DAQmx_Val_Volts,None)
+        else:
+            self.ao_task.CreateAOVoltageChan(posixpath.join(self.device,self.ao_x)+','+posixpath.join(self.device,self.ao_y),"Galvos",-10.0,10.0,DAQmx_Val_Volts,None)
         
         if not self.ext_clock:
             # AO will trigger everyone
@@ -194,8 +208,9 @@ class Galvos():
         self.line_rate=line_rate
 
         # Need to build double ramp here
-        ramp_x = np.concatenate((np.linspace(x0,xe,nx),self.getPolyReturn(x0,xe,nx,xe,x0,nx,n_extra),
-                                 np.linspace(xe,x0,nx),self.getPolyReturn(xe,x0,nx,x0,xe,nx,n_extra)))
+        flyback_1=self.getPolyReturn(x0,xe,nx,xe,x0,nx,n_extra)
+        flyback_2=self.getPolyReturn(xe,x0,nx,x0,xe,nx,n_extra)
+        ramp_x = np.concatenate((np.linspace(x0,xe,nx),flyback_1,np.linspace(xe,x0,nx),flyback_2))
         ramp_y = np.linspace(y0,ye,ny)
 
         full_x=self.converter.voltX(np.tile(ramp_x,[1,ny/2*n_repeat]))
@@ -222,21 +237,48 @@ class Galvos():
         self.n_extra = n_extra
         self.n_repeat = 1
         self.line_rate = line_rate
+        
+        
+        if self.aomFlag:
+            totalNumPoints=int(np.floor(self.daq_freq/self.line_rate))
+            self.nx=int(np.round((1-self.ratioLS_PO2)*totalNumPoints))
+            self.n_extra=totalNumPoints-self.nx
 
+        flybackUp_x=self.getPolyReturn(x0,xe,self.nx,xe,x0,self.nx,self.n_extra)
+        flybackDown_x=self.getPolyReturn(xe,x0,self.nx,x0,xe,self.nx,self.n_extra)
+        flybackUp_y=self.getPolyReturn(y0,ye,self.nx,ye,y0,self.nx,self.n_extra)
+        flybackDown_y=self.getPolyReturn(ye,y0,self.nx,y0,ye,self.nx,self.n_extra)
         # Need to build double ramp here
-        ramp_x = np.concatenate((np.linspace(x0,xe,npts),self.getPolyReturn(x0,xe,npts,xe,x0,npts,n_extra),
-                                 np.linspace(xe,x0,npts),self.getPolyReturn(xe,x0,npts,x0,xe,npts,n_extra)))
-        ramp_y = np.concatenate((np.linspace(y0,ye,npts),self.getPolyReturn(y0,ye,npts,ye,y0,npts,n_extra),
-                                 np.linspace(ye,y0,npts),self.getPolyReturn(ye,y0,npts,y0,ye,npts,n_extra)))
+        ramp_x = np.concatenate((np.linspace(x0,xe,self.nx),flybackUp_x,np.linspace(xe,x0,self.nx),flybackDown_x))
+        ramp_y = np.concatenate((np.linspace(y0,ye,self.nx),flybackUp_y, np.linspace(ye,y0,self.nx),flybackDown_y))
+
+        if self.aomFlag:
+            ramp_eom=np.zeros((totalNumPoints,self.ny))
+            self.n_pts_on=int(self.gate_on*self.daq_freq/1e6)
+            startLineVoltage=int((self.ratioLS_PO2/2)*totalNumPoints)
+            endLineVoltage=int((1-self.ratioLS_PO2/2)*totalNumPoints)
+            
+            ramp_eom[startLineVoltage:endLineVoltage,:]=self.powerLS
+            ramp_eom[endLineVoltage+1:endLineVoltage+self.n_pts_on+1,:]=self.powerPO2
+            ramp_eom=ramp_eom.flatten('F')
+            full_eom=np.tile(ramp_eom,[1,n_lines/2])
+            self.ny=self.ny/4
 
         full_x=self.converter.voltX(np.tile(ramp_x,[1,n_lines/2]))
         full_y=self.converter.voltY(np.tile(ramp_y,[1,n_lines/2]))
-        self.ramps=np.concatenate((full_x,full_y))
-
-        self.daq_freq=int(self.line_rate*(self.nx+self.n_extra))
-        # This is to chunk the repeats together for easier analysis
-        self.n_pts_frame = int((self.nx+self.n_extra)*self.ny)
+        
+        if self.aomFlag:
+            self.ramps=np.concatenate((full_x,full_y,full_eom))
+        else:
+            self.ramps=np.concatenate((full_x,full_y))
+            self.daq_freq=int(self.line_rate*(self.nx+self.n_extra))
+            # This is to chunk the repeats together for easier analysis
+            self.n_pts_frame = int((self.nx+self.n_extra)*self.ny)
+            
         self.config()
+        
+        if self.aomFlag:
+            return self.nx,self.n_extra,self.ny
         print 'line ramp set'
 
     def getPolyReturn(self,line1_VoltStart, line1_VoltEnd, n_pts_line1, line2_VoltStart, line2_VoltEnd, n_pts_line2, n_extra_pts):
