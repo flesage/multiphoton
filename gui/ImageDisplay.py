@@ -300,15 +300,15 @@ class po2Viewer(Queue.Queue):
         #plot(X[0:len(d)],d) #if you are interested
         #find the left and right most indexes
         left_idx = np.where(d > 0)[0]
-        right_idx = np.where(d < 0)[-1]
+        right_idx = np.where(d < 0)[-1]        
         if (len(left_idx)==0 or len(right_idx)==0):
-            fwhm[0]=0
+            fwhm=np.zeros(1)
         else:
             fwhm=X[right_idx] - X[left_idx] #return the difference (full width)
         print('FWHM')
         print(len(fwhm))
         if len(fwhm)==0:
-            fwhm[0]=0
+            fwhm=np.zeros(1,1)
         return fwhm[0]
     
     def showPreviousTraces(self,flag):
