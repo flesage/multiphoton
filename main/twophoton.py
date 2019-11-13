@@ -67,7 +67,7 @@ if __name__ == '__main__':
     # Define scale of system (according to telescope and objective)
     # Thorlabs galvo mirrors provide 0.8 V per degree but this has to be calibrated on target
     radians_per_volt = 2*np.pi/(360.0)#1.06 corrected for small, 0.5 is for big
-    f1=54
+    f1=50
     f2=300
     fobj=7.2 #29.5 with 4x, 7.2 with 25x
     scale_um_per_volt=(2*fobj*f1/f2*radians_per_volt)*1000
@@ -127,6 +127,7 @@ if __name__ == '__main__':
     galvos_controller.initialize_triangular_display()
     galvos_controller.defineViewerForPO2()
     galvos_controller.defineChannelToPlot()
+    galvos_controller.setInitialPower()
     galvos_controller.show()
 
     

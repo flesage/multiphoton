@@ -14,6 +14,7 @@ import numpy as np
 from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot
 from PyQt5 import QtCore
 
+
 import time
 
 #from base.liomacq import VoltageOutTask
@@ -86,6 +87,9 @@ class Galvos():
         self.center_y = 0.0
         self.shift_display = 0
         self.finite = False  
+        self.center_position=0
+        self.center_duration=0.6
+        self.short_position=0
     
     def configOnDemand(self):  
         self.ao_task = VoltageOutTask()
@@ -100,14 +104,38 @@ class Galvos():
                 
     def setEOMFlag(self,flag):
         self.aomFlag = flag
-
-    def setEOMParameters(self,flag,ao_eom,daq_freq,powerPO2,powerLS,on_time):
+        print('*** PO2LS Parameters:')
+        print('    AOM Flag: '+str(self.aomFlag))
+        print('    DAQ Flag: '+str(self.daq_freq))
+        print('    powerPO2: '+str(self.powerPO2))
+        print('    powerLS: '+str(self.powerLS))
+        print('    ao_eom: '+str(self.ao_eom))
+        print('    gate_on: '+str(self.gate_on))
+        print('    center_position: '+str(self.center_position))
+        print('    center_duration: '+str(self.center_duration))
+        print('    short_position: '+str(self.short_position)+'\n')
+        
+    def setEOMParameters(self,flag,ao_eom,daq_freq,powerPO2,powerLS,on_time,center_position,center_duration,short_position):
         self.aomFlag = flag
         self.daq_freq = daq_freq
         self.powerPO2 = powerPO2
         self.powerLS = powerLS
         self.ao_eom = ao_eom
         self.gate_on = on_time
+        self.center_position=center_position
+        self.center_duration=center_duration
+        self.short_position=short_position
+        print('*** PO2LS Parameters:')
+        print('    AOM Flag: '+str(self.aomFlag))
+        print('    DAQ Flag: '+str(self.daq_freq))
+        print('    powerPO2: '+str(self.powerPO2))
+        print('    powerLS: '+str(self.powerLS))
+        print('    ao_eom: '+str(self.ao_eom))
+        print('    gate_on: '+str(self.gate_on))
+        print('    center_position: '+str(self.center_position))
+        print('    center_duration: '+str(self.center_duration))
+        print('    short_position: '+str(self.short_position)+'\n')
+            
         
     def config(self):
         # First create both channels
@@ -239,9 +267,10 @@ class Galvos():
         self.line_rate = line_rate
         
         
+        
         if self.aomFlag:
             totalNumPoints=int(np.floor(self.daq_freq/self.line_rate))
-            self.nx=int(np.round((1-self.ratioLS_PO2)*totalNumPoints))
+            self.nx=int(np.round((1-100.0/512.0)*totalNumPoints))
             self.n_extra=totalNumPoints-self.nx
 
         flybackUp_x=self.getPolyReturn(x0,xe,self.nx,xe,x0,self.nx,self.n_extra)
@@ -253,17 +282,34 @@ class Galvos():
         ramp_y = np.concatenate((np.linspace(y0,ye,self.nx),flybackUp_y, np.linspace(ye,y0,self.nx),flybackDown_y))
 
         if self.aomFlag:
-            ramp_eom=np.zeros((totalNumPoints,self.ny))
-            self.n_pts_on=int(self.gate_on*self.daq_freq/1e6)
-            startLineVoltage=int((self.ratioLS_PO2/2)*totalNumPoints)
-            endLineVoltage=int((1-self.ratioLS_PO2/2)*totalNumPoints)
+            ramp_eom=np.zeros((totalNumPoints*2,self.ny/2))
+            startLineVoltage=int((self.center_duration/2)*totalNumPoints)
+            endLineVoltage=int((1-self.center_duration/2)*totalNumPoints)
             
-            ramp_eom[startLineVoltage:endLineVoltage,:]=self.powerLS
-            ramp_eom[endLineVoltage+1:endLineVoltage+self.n_pts_on+1,:]=self.powerPO2
+            startLineVoltageUp=startLineVoltage;
+            endLineVoltageUp=endLineVoltage;
+            startLineVoltageDown=startLineVoltage+self.center_position+self.nx+self.n_extra;
+            endLineVoltageDown=endLineVoltage+self.center_position+self.nx+self.n_extra;
+            
+            ramp_eom[startLineVoltageUp:endLineVoltageUp,:]=self.powerLS
+            ramp_eom[startLineVoltageDown:endLineVoltageDown,:]=self.powerLS
+            
+            if self.gate_on>0:
+                self.n_pts_on=int(self.gate_on*self.daq_freq/1e6)
+                ramp_eom[endLineVoltageUp+self.short_position:endLineVoltageUp+self.short_position+self.n_pts_on,:]=self.powerPO2
+                ramp_eom[endLineVoltageDown+self.short_position:endLineVoltageDown+self.short_position+self.n_pts_on,:]=self.powerPO2
+                
             ramp_eom=ramp_eom.flatten('F')
-            full_eom=np.tile(ramp_eom,[1,n_lines/2])
-            self.ny=self.ny/4
 
+            full_eom=np.zeros([1,ramp_eom.size])
+            full_eom[0,0:ramp_eom.size]=ramp_eom
+            #plt.plot(ramp_eom)
+            #plt.ylabel('RAMP EOM')
+            #plt.show()
+            #plt.plot(ramp_x)
+            #plt.ylabel('RAMP X')
+            #plt.show()
+            
         full_x=self.converter.voltX(np.tile(ramp_x,[1,n_lines/2]))
         full_y=self.converter.voltY(np.tile(ramp_y,[1,n_lines/2]))
         
@@ -273,14 +319,41 @@ class Galvos():
             self.ramps=np.concatenate((full_x,full_y))
             self.daq_freq=int(self.line_rate*(self.nx+self.n_extra))
             # This is to chunk the repeats together for easier analysis
-            self.n_pts_frame = int((self.nx+self.n_extra)*self.ny)
+        self.n_pts_frame = int((self.nx+self.n_extra)*self.ny)
             
         self.config()
         
         if self.aomFlag:
             return self.nx,self.n_extra,self.ny
         print 'line ramp set'
+        
 
+    @pyqtSlot(int)
+    def change_power_center_illumination(self, power_value):
+        self.powerLS = power_value*2.0/100.0
+
+    @pyqtSlot(int)
+    def change_power_short_illumination(self, power_value):
+        self.powerPO2 = power_value*2.0/100.0
+        print('changed position!')    
+        
+    @pyqtSlot(int)
+    def move_position_center_illumination(self, center_position):
+        self.center_position = center_position
+        print('changed position!')
+
+    @pyqtSlot(int)
+    def change_duration_center_illumination(self, center_duration):
+        self.center_duration = center_duration/100.0
+        
+    @pyqtSlot(int)
+    def move_position_short_illumination(self, short_position):
+        self.short_position = short_position          
+
+    @pyqtSlot(int)
+    def change_duration_short_illumination(self, short_duration):
+        self.gate_on = short_duration    
+        
     def getPolyReturn(self,line1_VoltStart, line1_VoltEnd, n_pts_line1, line2_VoltStart, line2_VoltEnd, n_pts_line2, n_extra_pts):
         '''Returns polynomial for galvo ramp to interpolate between two ramps. This
         function solves the polynomial return so that: start and end values are
@@ -308,14 +381,48 @@ class Galvos():
             y=np.empty()
         return y
 
+    def createEOMRamp(self):
+        totalNumPoints=int(np.floor(self.daq_freq/self.line_rate))
+        self.nx=int(np.round((1-100.0/512.0)*totalNumPoints))
+        self.n_extra=totalNumPoints-self.nx
+
+        ramp_eom=np.zeros((totalNumPoints*2,self.ny/2))
+        startLineVoltage=int((self.center_duration/2)*totalNumPoints)
+        endLineVoltage=int((1-self.center_duration/2)*totalNumPoints)
+            
+        startLineVoltageUp=startLineVoltage;
+        endLineVoltageUp=endLineVoltage;
+        startLineVoltageDown=startLineVoltage+self.center_position+self.nx+self.n_extra;
+        endLineVoltageDown=endLineVoltage+self.center_position+self.nx+self.n_extra;
+            
+        ramp_eom[startLineVoltageUp:endLineVoltageUp,:]=self.powerLS
+        ramp_eom[startLineVoltageDown:endLineVoltageDown,:]=self.powerLS
+            
+        if self.gate_on>0:
+            self.n_pts_on=int(self.gate_on*self.daq_freq/1e6)
+            ramp_eom[endLineVoltageUp+self.short_position:endLineVoltageUp+self.short_position+self.n_pts_on,:]=self.powerPO2
+            ramp_eom[endLineVoltageDown+self.short_position:endLineVoltageDown+self.short_position+self.n_pts_on,:]=self.powerPO2
+                
+        ramp_eom=ramp_eom.flatten('F')
+        full_eom=np.zeros([1,ramp_eom.size])
+        full_eom[0,0:ramp_eom.size]=ramp_eom
+        return full_eom
+    
+
     def continuousWrite(self):        
         # Writes continuously and will adapt according to the center position:
         while self.started:
             # Divide in n_repeat chunks
             for i in range(self.n_repeat):
                 current_ramp = self.ramps[:,i*self.n_pts_frame:(i+1)*self.n_pts_frame]
-                self.ao_task.WriteAnalogF64(current_ramp.shape[1],True,-1,DAQmx_Val_GroupByChannel,
-                                            (current_ramp+np.tile([[self.converter.voltX(self.center_x)],[self.converter.voltY(self.center_y)]],[1,current_ramp.shape[1]])).flatten(),byref(self.read),None)
+                if self.aomFlag:
+                    current_ramp[2,:]=self.createEOMRamp()
+                    self.ao_task.WriteAnalogF64(current_ramp.shape[1],True,-1,DAQmx_Val_GroupByChannel,
+                                                (current_ramp+np.tile([[self.converter.voltX(self.center_x)],[self.converter.voltY(self.center_y)],[0]],[1,current_ramp.shape[1]])).flatten(),byref(self.read),None)
+                else:
+                    self.ao_task.WriteAnalogF64(current_ramp.shape[1],True,-1,DAQmx_Val_GroupByChannel,
+                                                (current_ramp+np.tile([[self.converter.voltX(self.center_x)],[self.converter.voltY(self.center_y)]],[1,current_ramp.shape[1]])).flatten(),byref(self.read),None)
+                
                 if self.started == False:
                     break
 
@@ -331,6 +438,8 @@ class Galvos():
     @pyqtSlot(int)
     def move_offset_Y(self, center_y):
         self.center_y = center_y      
+        
+      
 
     def move(self,center_x,center_y):
         print('move called!')
