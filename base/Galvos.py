@@ -249,9 +249,35 @@ class Galvos():
         # This is to chunk the repeats together for easier analysis
         self.n_pts_frame = int((self.nx+self.n_extra)*self.ny)
         self.config()
+        
+    def createEOMRamp(self):
+        totalNumPoints=int(np.floor(self.daq_freq/self.line_rate))
+        self.nx=int(np.round((1-100.0/612.0)*totalNumPoints))
+        self.n_extra=totalNumPoints-self.nx
+
+        ramp_eom=np.zeros((totalNumPoints*2,self.ny/2))
+        startLineVoltage=int((self.center_duration/2)*totalNumPoints)
+        endLineVoltage=int((1-self.center_duration/2)*totalNumPoints)
+            
+        startLineVoltageUp=startLineVoltage;
+        endLineVoltageUp=endLineVoltage;
+        startLineVoltageDown=startLineVoltage+self.center_position+self.nx+self.n_extra;
+        endLineVoltageDown=endLineVoltage+self.center_position+self.nx+self.n_extra;
+            
+        ramp_eom[startLineVoltageUp:endLineVoltageUp,:]=self.powerLS
+        ramp_eom[startLineVoltageDown:endLineVoltageDown,:]=self.powerLS
+            
+        if self.gate_on>0:
+            self.n_pts_on=int(self.gate_on*self.daq_freq/1e6)
+            ramp_eom[endLineVoltageUp+self.short_position:endLineVoltageUp+self.short_position+self.n_pts_on,:]=self.powerPO2
+            ramp_eom[endLineVoltageDown+self.short_position:endLineVoltageDown+self.short_position+self.n_pts_on,:]=self.powerPO2
+                
+        ramp_eom=ramp_eom.flatten('F')
+        full_eom=np.zeros([1,ramp_eom.size])
+        full_eom[0,0:ramp_eom.size]=ramp_eom
+        return full_eom
 
     def setLineRamp(self,x0,y0,xe,ye,npts,n_lines,n_extra,line_rate,shift_display):
-
         self.shift_display=shift_display
         if self.started:
             self.stopTask()
@@ -266,12 +292,8 @@ class Galvos():
         self.n_repeat = 1
         self.line_rate = line_rate
         
-        
-        
         if self.aomFlag:
-            totalNumPoints=int(np.floor(self.daq_freq/self.line_rate))
-            self.nx=int(np.round((1-100.0/512.0)*totalNumPoints))
-            self.n_extra=totalNumPoints-self.nx
+            full_eom=self.createEOMRamp()
 
         flybackUp_x=self.getPolyReturn(x0,xe,self.nx,xe,x0,self.nx,self.n_extra)
         flybackDown_x=self.getPolyReturn(xe,x0,self.nx,x0,xe,self.nx,self.n_extra)
@@ -279,37 +301,7 @@ class Galvos():
         flybackDown_y=self.getPolyReturn(ye,y0,self.nx,y0,ye,self.nx,self.n_extra)
         # Need to build double ramp here
         ramp_x = np.concatenate((np.linspace(x0,xe,self.nx),flybackUp_x,np.linspace(xe,x0,self.nx),flybackDown_x))
-        ramp_y = np.concatenate((np.linspace(y0,ye,self.nx),flybackUp_y, np.linspace(ye,y0,self.nx),flybackDown_y))
-
-        if self.aomFlag:
-            ramp_eom=np.zeros((totalNumPoints*2,self.ny/2))
-            startLineVoltage=int((self.center_duration/2)*totalNumPoints)
-            endLineVoltage=int((1-self.center_duration/2)*totalNumPoints)
-            
-            startLineVoltageUp=startLineVoltage;
-            endLineVoltageUp=endLineVoltage;
-            startLineVoltageDown=startLineVoltage+self.center_position+self.nx+self.n_extra;
-            endLineVoltageDown=endLineVoltage+self.center_position+self.nx+self.n_extra;
-            
-            ramp_eom[startLineVoltageUp:endLineVoltageUp,:]=self.powerLS
-            ramp_eom[startLineVoltageDown:endLineVoltageDown,:]=self.powerLS
-            
-            if self.gate_on>0:
-                self.n_pts_on=int(self.gate_on*self.daq_freq/1e6)
-                ramp_eom[endLineVoltageUp+self.short_position:endLineVoltageUp+self.short_position+self.n_pts_on,:]=self.powerPO2
-                ramp_eom[endLineVoltageDown+self.short_position:endLineVoltageDown+self.short_position+self.n_pts_on,:]=self.powerPO2
-                
-            ramp_eom=ramp_eom.flatten('F')
-
-            full_eom=np.zeros([1,ramp_eom.size])
-            full_eom[0,0:ramp_eom.size]=ramp_eom
-            #plt.plot(ramp_eom)
-            #plt.ylabel('RAMP EOM')
-            #plt.show()
-            #plt.plot(ramp_x)
-            #plt.ylabel('RAMP X')
-            #plt.show()
-            
+        ramp_y = np.concatenate((np.linspace(y0,ye,self.nx),flybackUp_y, np.linspace(ye,y0,self.nx),flybackDown_y))           
         full_x=self.converter.voltX(np.tile(ramp_x,[1,n_lines/2]))
         full_y=self.converter.voltY(np.tile(ramp_y,[1,n_lines/2]))
         
@@ -380,34 +372,6 @@ class Galvos():
         else:
             y=np.empty()
         return y
-
-    def createEOMRamp(self):
-        totalNumPoints=int(np.floor(self.daq_freq/self.line_rate))
-        self.nx=int(np.round((1-100.0/512.0)*totalNumPoints))
-        self.n_extra=totalNumPoints-self.nx
-
-        ramp_eom=np.zeros((totalNumPoints*2,self.ny/2))
-        startLineVoltage=int((self.center_duration/2)*totalNumPoints)
-        endLineVoltage=int((1-self.center_duration/2)*totalNumPoints)
-            
-        startLineVoltageUp=startLineVoltage;
-        endLineVoltageUp=endLineVoltage;
-        startLineVoltageDown=startLineVoltage+self.center_position+self.nx+self.n_extra;
-        endLineVoltageDown=endLineVoltage+self.center_position+self.nx+self.n_extra;
-            
-        ramp_eom[startLineVoltageUp:endLineVoltageUp,:]=self.powerLS
-        ramp_eom[startLineVoltageDown:endLineVoltageDown,:]=self.powerLS
-            
-        if self.gate_on>0:
-            self.n_pts_on=int(self.gate_on*self.daq_freq/1e6)
-            ramp_eom[endLineVoltageUp+self.short_position:endLineVoltageUp+self.short_position+self.n_pts_on,:]=self.powerPO2
-            ramp_eom[endLineVoltageDown+self.short_position:endLineVoltageDown+self.short_position+self.n_pts_on,:]=self.powerPO2
-                
-        ramp_eom=ramp_eom.flatten('F')
-        full_eom=np.zeros([1,ramp_eom.size])
-        full_eom[0,0:ramp_eom.size]=ramp_eom
-        return full_eom
-    
 
     def continuousWrite(self):        
         # Writes continuously and will adapt according to the center position:

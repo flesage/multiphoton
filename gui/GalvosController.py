@@ -256,6 +256,8 @@ class GalvosController(QWidget):
         self.pushButton_3PWheel_Activate.clicked.connect(self.toggle3PWheel)
         self.enableWheelFlag = 0
         self.flagWheel = 1
+        self.pushButton_3PWheel_getVel.clicked.connect(self.getVel3P)
+        self.pushButton_3PWheel_setVel.clicked.connect(self.setVel3P)
         
         #Multiple lines:
         self.pushButtonAddLine.clicked.connect(self.addLines)
@@ -379,7 +381,25 @@ class GalvosController(QWidget):
         self.moveCenterIllumination_PO2_LS()
         self.changeShortIllumination_PO2_LS()
         self.moveShortIllumination_PO2_LS()
-        self.simultaneousPO2LS=0
+        self.eomLSFlag=0
+        
+    #power meter:
+        self.pushButton_initPowerMeter.clicked.connect(self.initPowerMeter)
+        
+    #activate EOM:
+        self.checkBox_activateEOM.clicked.connect(self.toggle_EOM_LS)
+        self.EOM_LS_flag=0
+
+        
+    def initPowerMeter(self):
+        import visa
+        from ThorlabsPM100 import ThorlabsPM100
+        rm = visa.ResourceManager('@py')
+        print(rm.list_resources()) #2
+
+
+        inst = rm.open_resource("USB0::0x1313::0x8078::P0021056::INSTR",term_chars="\n", timeout=1)
+        self.power_meter = ThorlabsPM100(inst=inst)
 
     def setInitialPower(self):
         power2ph=self.horizontalScrollBar_power2ph.value()
@@ -389,8 +409,32 @@ class GalvosController(QWidget):
     def setPowerPO2_LS(self,value):
         # Input value is 0-100%, needs to be mapped to 0-2V for EOM input
         self.label_powerPO2LS.setText(str(int(value))+' %')
+
+    def updateParameters_EOM_LS(self):
+        self.eomLSFlag=self.checkBox_activateEOM.isChecked()
+        power2ph=self.horizontalScrollBar_power2ph.value()
+        powerPO2=0.0
+        powerLS = 2.0*power2ph/100.0
+        onTimeRatioCenter = 0.03
+        onTimePositionCenter = 99
+        onTimePositionShort = 0.0
+        on_time = 0.0
+        lineRate=float(self.lineEdit_linerate_LS.text())
+        nr=float(self.lineEdit_nr.text())
+        n_extra=float(self.lineEdit_extrapoints_LS.text())
+        daq_freq=lineRate*(nr+n_extra)
+        self.galvos.setEOMParameters(self.eomLSFlag,config.eom_ao,daq_freq,powerPO2,powerLS,on_time,onTimePositionCenter,onTimeRatioCenter,onTimePositionShort)
+        return powerLS, powerPO2, onTimeRatioCenter, onTimePositionCenter, onTimePositionShort, on_time
         
-    
+    def toggle_EOM_LS(self):
+        print('Toggling PO2-LS...')
+        self.eomLSFlag=self.checkBox_activateEOM.isChecked()
+        if self.eomLSFlag:
+            print('...Activating PO2-LS')
+            self.updateParameters_EOM_LS()
+        else:
+            print('...Deactivating PO2-LS')
+            self.galvos.setEOMFlag(self.eomLSFlag)   
     
     def toggle_PO2_LS(self):
         print('Toggling PO2-LS...')
@@ -661,6 +705,16 @@ class GalvosController(QWidget):
         self.horizontalScrollBar_power3ph.setEnabled(status)
         self.label_3PhWheel.setEnabled(status)
         self.label_power3P.setEnabled(status)
+        
+    def setVel3P(self):
+        self.ThreePWheelVelocity=float(self.lineEdit_3PWheel_vel.text())
+        self.thorlabs.setVelocityParameters(0.0,10.0,self.ThreePWheelVelocity)
+        param=self.thorlabs.getVelocityParameterLimits()
+        print(param)
+
+    def getVel3P(self):
+        param=self.thorlabs.getVelocityParameters()
+        print(param)
         
     def kill3PWheel(self):
         if (self.enableWheelFlag==1):
@@ -2341,20 +2395,26 @@ class GalvosController(QWidget):
         
     def startlinescan(self):
         self.update_linescan()
-        if self.simultaneousPO2LS:
+        if (self.simultaneousPO2LS or self.eomLSFlag):
+            print('making connection for PO2-LS')
             self.make_connection_power_center_illumination()
             self.make_connection_power_short_illumination()
             self.make_connection_pos_center_illumination()
             self.make_connection_change_center_illumination()
             self.make_connection_move_short_illumination()
             self.make_connection_change_short_illumination()
-            self.make_connection_power_short_illumination()
+            self.make_connection_power_short_illumination()   
             self.n_lines_previous=int(self.lineEdit_nt.text())
             self.nx_preview_previous=int(self.lineEdit_nx.text())
             self.ny_preview_previous=int(self.lineEdit_ny.text())
             self.n_extra_previous=int(self.lineEdit_extrapoints_LS.text())   
             self.npts_previous=int(self.lineEdit_nr.text())  
-            powerLS, powerPO2, onTimeRatioCenter, onTimePositionCenter, onTimePositionShort, on_time =  self.updateParametersSimultaneous_PO2LS()
+            if self.simultaneousPO2LS:
+                powerLS, powerPO2, onTimeRatioCenter, onTimePositionCenter, onTimePositionShort, on_time =  self.updateParametersSimultaneous_PO2LS()
+            elif self.eomLSFlag:
+                powerLS, powerPO2, onTimeRatioCenter, onTimePositionCenter, onTimePositionShort, on_time =  self.updateParameters_EOM_LS()
+                
+            
             
             try:
                 self.power_ao_eom.ClearTask()
@@ -2420,7 +2480,8 @@ class GalvosController(QWidget):
             self.viewer.move_offset_display(shift_display)
             self.viewer2.move_offset_display(shift_display)
             
-            if self.simultaneousPO2LS:
+            if (self.simultaneousPO2LS or self.eomLSFlag):
+                print('creating ramp PO2LS')
                 [npts,n_extra,n_lines]=self.galvos.setLineRamp(y_0_um,x_0_um,y_e_um,x_e_um,npts,n_lines,n_extra,line_rate,shift_display)
             else:
                 self.galvos.setLineRamp(y_0_um,x_0_um,y_e_um,x_e_um,npts,n_lines,n_extra,line_rate,shift_display)
@@ -2468,7 +2529,7 @@ class GalvosController(QWidget):
                 self.data_saver.addAttribute('x_FOV_center',self.currentXPos)
                 self.data_saver.addAttribute('y_FOV_center',self.currentYPos)
                 self.data_saver.addAttribute('last live scan:',self.liveScanNumber)
-                if self.simultaneousPO2LS:
+                if (self.simultaneousPO2LS or self.eomLSFlag):
                     self.data_saver.addAttribute('powerLS',powerLS)
                     self.data_saver.addAttribute('powerPO2',powerPO2)
                     self.data_saver.addAttribute('onTimeRatioCenter',onTimeRatioCenter)
@@ -2497,7 +2558,7 @@ class GalvosController(QWidget):
         self.pushButton_start.setEnabled(True)
         self.viewer.setLineScanFlag(False)
         self.viewer2.setLineScanFlag(False)
-        if self.simultaneousPO2LS:
+        if (self.simultaneousPO2LS or self.eomLSFlag):
             self.power_ao_eom = OnDemandVoltageOutTask(config.eom_device, config.eom_ao, 'Power2Ph')
             self.lineEdit_nt.setText(str(self.n_lines_previous))
             self.lineEdit_nx.setText(str(self.nx_preview_previous))
@@ -2506,7 +2567,9 @@ class GalvosController(QWidget):
             self.lineEdit_nr.setText(str(self.npts_previous))
             self.setInitialPower()        
         self.simultaneousPO2LS=0
+        self.eomLSFlag=0
         self.checkBox_activatePO2LS.setChecked(0)
+        self.checkBox_activateEOM.setChecked(0)
         self.toggle_PO2_LS()
         
             

@@ -449,20 +449,20 @@ class ThorlabsMotor(APTMotor.APTMotor):
         
     def goHome(self):
         self.configthorlabsmotor=False
-        self.mcAbs(0.0)
+        self.mAbs(0.0)
         self.configthorlabsmotor=True
         
     def setpos(self,commandPos):
         self.configthorlabsmotor=False
         print 'going to position...'
-        self.mcAbs(commandPos)
+        self.mAbs(commandPos)
         print 'done!'
         self.configthorlabsmotor=True
         
     def setposRel(self,commandPos):
         self.configthorlabsmotor=False
         print 'moving of ' + str(commandPos) + '...'
-        self.mcRel(commandPos)
+        self.mRel(commandPos)
         print 'done!'
         self.configthorlabsmotor=True
         
