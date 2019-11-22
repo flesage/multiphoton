@@ -190,7 +190,7 @@ class GalvosController(QWidget):
         self.pushButton_stop_linescan.setEnabled(False)
         self.horizontalScrollBar_line_scan_shift_y.setValue(-20)
         self.horizontalScrollBar_line_scan_shift_x.setValue(0)
-        self.horizontalScrollBar_line_scan_shift_display.setValue(106)
+        self.horizontalScrollBar_line_scan_shift_display.setValue(102)
         self.horizontalScrollBar_line_scan_shift_y.valueChanged.connect(self.update_linescan)
         self.horizontalScrollBar_line_scan_shift_x.valueChanged.connect(self.update_linescan)
         self.horizontalScrollBar_line_scan_shift_x.valueChanged.connect(self.shift_x_changed_value)
@@ -383,6 +383,8 @@ class GalvosController(QWidget):
         self.moveShortIllumination_PO2_LS()
         self.eomLSFlag=0
         
+        self.pushButtonUpdate3PPowerCurve.clicked.connect(self.generatePowerCurve3P)
+        
     #power meter:
         self.pushButton_initPowerMeter.clicked.connect(self.initPowerMeter)
         
@@ -390,15 +392,39 @@ class GalvosController(QWidget):
         self.checkBox_activateEOM.clicked.connect(self.toggle_EOM_LS)
         self.EOM_LS_flag=0
 
+    def generatePowerCurve2P(self):
+        perc=np.arange(0,100,5)
+        val=[1.3,8,23,45,75,113,155,204,257,312,370,426,484,580,580,580,580,580,580,580]
+        f2 = interp1d(perc, val, kind='quadratic',fill_value='extrapolate')
+        perc2=np.arange(0,100,1);
+        self.powerValues2P=f2(perc2)
         
-    def initPowerMeter(self):
+    def generatePowerCurve3P(self):
+        perc=np.array([0,15,23,31,38,46,54,62,69,77,85,92,100])
+        val=np.array([0.6,7,16.3,29.3,44,61,79,97,114,129,141,150,155])
+        minVal=float(self.lineEdit_3PWheelMin.text())
+        maxVal=float(self.lineEdit_3PWheelMax.text())
+        val=(val-min(val))/max(val)*(maxVal)
+        val=val+minVal
+        
+        f2 = interp1d(perc, val, kind='quadratic',fill_value='extrapolate')
+        perc2=np.arange(0,100,1);
+        self.powerValues3P=f2(perc2)
+        
+        
+    def initPowerMeter(self):        
+        
+        import serial
+        
         import visa
         from ThorlabsPM100 import ThorlabsPM100
-        rm = visa.ResourceManager('@py')
+        rm = visa.ResourceManager()
         print(rm.list_resources()) #2
 
 
-        inst = rm.open_resource("USB0::0x1313::0x8078::P0021056::INSTR",term_chars="\n", timeout=1)
+        inst = rm.open_resource('USB0::4883::32888::P0021056::0::INSTR', write_termination='\r', read_termination='\r')# ,term_chars='\n', timeout=1)
+        
+        inst.query('*IDN?')
         self.power_meter = ThorlabsPM100(inst=inst)
 
     def setInitialPower(self):
@@ -416,14 +442,15 @@ class GalvosController(QWidget):
         powerPO2=0.0
         powerLS = 2.0*power2ph/100.0
         onTimeRatioCenter = 0.03
-        onTimePositionCenter = 99
+        onTimePositionCenter = 95
         onTimePositionShort = 0.0
         on_time = 0.0
         lineRate=float(self.lineEdit_linerate_LS.text())
         nr=float(self.lineEdit_nr.text())
         n_extra=float(self.lineEdit_extrapoints_LS.text())
         daq_freq=lineRate*(nr+n_extra)
-        self.galvos.setEOMParameters(self.eomLSFlag,config.eom_ao,daq_freq,powerPO2,powerLS,on_time,onTimePositionCenter,onTimeRatioCenter,onTimePositionShort)
+        lineModulation=self.checkBox_modulateAllLinesEOM.isChecked()
+        self.galvos.setEOMParameters(self.eomLSFlag,config.eom_ao,daq_freq,powerPO2,powerLS,on_time,onTimePositionCenter,onTimeRatioCenter,onTimePositionShort,lineModulation)
         return powerLS, powerPO2, onTimeRatioCenter, onTimePositionCenter, onTimePositionShort, on_time
         
     def toggle_EOM_LS(self):
@@ -485,7 +512,7 @@ class GalvosController(QWidget):
         onTimePositionCenter = self.getCentralIlluminationPosition_PO2LS()
         onTimePositionShort = self.getShortIlluminationPosition_PO2LS()
         on_time = self.horizontalScrollBar_change_short_illumination.value()
-        self.galvos.setEOMParameters(self.simultaneousPO2LS,config.eom_ao,0.6e6,powerPO2,powerLS,on_time,onTimePositionCenter,onTimeRatioCenter,onTimePositionShort)
+        self.galvos.setEOMParameters(self.simultaneousPO2LS,config.eom_ao,0.6e6,powerPO2,powerLS,on_time,onTimePositionCenter,onTimeRatioCenter,onTimePositionShort,1)
         return powerLS, powerPO2, onTimeRatioCenter, onTimePositionCenter, onTimePositionShort, on_time
           
     def setAutoRange(self):
@@ -941,6 +968,8 @@ class GalvosController(QWidget):
         
         
     def start_po2_scan(self):
+        self.checkBox_activateEOM.setChecked(0)
+        self.eomLSFlag=0
         self.defineChannelToPlot()
         flagPreviousTraces=self.checkBox_PO2_showPreviousTraces.isChecked()
         self.convertPosToVolts()
@@ -1064,6 +1093,8 @@ class GalvosController(QWidget):
         self.nextPO2Point()
 
     def start_3p_po2_scan(self):
+        self.checkBox_activateEOM.setChecked(0)
+        self.eomLSFlag=0
         self.defineChannelToPlot()
         flagPreviousTraces=self.checkBox_PO2_showPreviousTraces.isChecked()
 
@@ -1924,6 +1955,8 @@ class GalvosController(QWidget):
         # Input value is 0-100%, needs to be mapped to 0-2V for EOM input
         self.label_power2P.setText(str(int(value))+' %')
         eom_voltage=2.0*value/100.0
+        self.update2Ppower()
+
         if not(self.simultaneousPO2LS):
             self.power_ao_eom.write(eom_voltage)
     
@@ -1936,6 +1969,7 @@ class GalvosController(QWidget):
             self.flagWheel = 0
             thread = threading.Thread(target=self.wheel_run, args=(command,))
             thread.start()
+            self.update3Ppower()
         
     def setPower3ph_noThread(self,value):
         if self.flagWheel == 1:
@@ -2567,9 +2601,8 @@ class GalvosController(QWidget):
             self.lineEdit_nr.setText(str(self.npts_previous))
             self.setInitialPower()        
         self.simultaneousPO2LS=0
-        self.eomLSFlag=0
         self.checkBox_activatePO2LS.setChecked(0)
-        self.checkBox_activateEOM.setChecked(0)
+
         self.toggle_PO2_LS()
         
             
@@ -2598,7 +2631,25 @@ class GalvosController(QWidget):
         self.viewer2.checkAverageFlag(False,av,nx+n_extra,ny)      
         self.checkBox_average.setChecked(False)
         
+    def update2Ppower(self):
+        self.powerValue2P=int(self.horizontalScrollBar_power2ph.value())
+        self.powerValue2P=np.floor(self.powerValues2P[self.powerValue2P]/10)*10
+        txt=str(self.powerValue2P)+' mW'
+        self.label_powerValue2p.setText(txt)
+        
+    def update3Ppower(self):
+        self.powerValue3P=int(self.horizontalScrollBar_power3ph.value())
+        self.powerValue3P=np.floor(self.powerValues3P[self.powerValue3P]/10)*10
+        txt=str(self.powerValue3P)+' mW'
+        self.label_powerValue3p.setText(txt)      
+        
     def startscan(self):
+        self.update2Ppower()
+        self.update3Ppower()        
+                
+        
+        self.checkBox_activateEOM.setChecked(0)
+        self.eomLSFlag=0
         self.setInitialPower()
         self.make_connection_offset_Display_live()
         self.viewer.getScanningType(self.comboBox_scantype.currentText())
@@ -2660,6 +2711,15 @@ class GalvosController(QWidget):
             self.data_saver.addAttribute('depth',currentdepth)
             self.comment=(self.lineEdit_comment.text())
             self.data_saver.addAttribute('comment',self.comment)
+            if self.shutter2ph_closed:
+                self.data_saver.addAttribute('laser','MaiTai')
+                self.data_saver.addAttribute('power2P',self.powerValue2P)
+            elif self.shutter3ph_closed:
+                self.data_saver.addAttribute('laser','3P Soliton')
+                self.data_saver.addAttribute('power3P',self.powerValue3P)
+            else:
+                self.data_saver.addAttribute('laser','None')
+                
                
             self.data_saver.setBlockSize(512)          
             self.ai_task.setDataConsumer(self.data_saver,True,0,'save',True)
@@ -2780,7 +2840,8 @@ class GalvosController(QWidget):
     def start_snapshot(self,center_x,center_y,width,height):
         #self.stackNumber=self.stackNumber+1;
         self.disable_averaging()
-
+        self.checkBox_activateEOM.setChecked(0)
+        self.eomLSFlag=0
         self.pushButton_start_stack.setEnabled(False)
         self.pushButton_stop_stack.setEnabled(True)
         self.get_current_z_depth()
@@ -3103,6 +3164,8 @@ class GalvosController(QWidget):
     #STACK
     
     def start_stack_thread(self):
+        self.checkBox_activateEOM.setChecked(0)
+        self.eomLSFlag=0
         self.setInitialPower()
         self.make_connection_offset_Display_live()
         self.viewer.getScanningType(self.comboBox_scantype.currentText())

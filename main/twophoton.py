@@ -127,7 +127,10 @@ if __name__ == '__main__':
     galvos_controller.initialize_triangular_display()
     galvos_controller.defineViewerForPO2()
     galvos_controller.defineChannelToPlot()
+    galvos_controller.generatePowerCurve2P()
+    galvos_controller.generatePowerCurve2P()
     galvos_controller.setInitialPower()
+
     galvos_controller.show()
 
     

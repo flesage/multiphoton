@@ -290,7 +290,11 @@ class po2Viewer(Queue.Queue):
     
         
     def getEstimationPO2(self):
-        return self.po2_values[-1]
+        try:
+            tmp=self.po2_values[-1]
+        except IndexError:
+            tmp=0
+        return tmp
 
     def FWHM(self,X,Y):
         half_max = 0.2
@@ -405,7 +409,7 @@ class ChannelViewer(Queue.Queue):
         self.linescan_not_displayed=0
         self.lineSelected=-1
         self.rectSelected=-1
-        self.setTestImage()
+        #self.setTestImage()
         #self.generateAutoLines()
         #self.displayLogo()
         self.intensityCurve =[]

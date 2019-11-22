@@ -264,14 +264,20 @@ class Galvos():
         startLineVoltageDown=startLineVoltage+self.center_position+self.nx+self.n_extra;
         endLineVoltageDown=endLineVoltage+self.center_position+self.nx+self.n_extra;
             
-        ramp_eom[startLineVoltageUp:endLineVoltageUp,:]=self.powerLS
-        ramp_eom[startLineVoltageDown:endLineVoltageDown,:]=self.powerLS
+        if self.modulatePowerOnAllLines:
             
-        if self.gate_on>0:
-            self.n_pts_on=int(self.gate_on*self.daq_freq/1e6)
-            ramp_eom[endLineVoltageUp+self.short_position:endLineVoltageUp+self.short_position+self.n_pts_on,:]=self.powerPO2
-            ramp_eom[endLineVoltageDown+self.short_position:endLineVoltageDown+self.short_position+self.n_pts_on,:]=self.powerPO2
+            ramp_eom[startLineVoltageUp:endLineVoltageUp,:]=self.powerLS
+            ramp_eom[startLineVoltageDown:endLineVoltageDown,:]=self.powerLS
+            
+            if self.gate_on>0:
+                self.n_pts_on=int(self.gate_on*self.daq_freq/1e6)
+                ramp_eom[endLineVoltageUp+self.short_position:endLineVoltageUp+self.short_position+self.n_pts_on,:]=self.powerPO2
+                ramp_eom[endLineVoltageDown+self.short_position:endLineVoltageDown+self.short_position+self.n_pts_on,:]=self.powerPO2
                 
+        else:
+            ramp_eom[startLineVoltageUp:-1,0:-2]=self.powerLS
+            ramp_eom[0:endLineVoltageDown,-1]=self.powerLS
+              
         ramp_eom=ramp_eom.flatten('F')
         full_eom=np.zeros([1,ramp_eom.size])
         full_eom[0,0:ramp_eom.size]=ramp_eom
