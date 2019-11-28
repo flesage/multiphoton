@@ -993,6 +993,7 @@ class ChannelViewer(Queue.Queue):
     def update(self):
         try:
             data = self.get(False)
+          
             if self.intensityFlag:
                 tempAv=-np.mean(data)
                 print(tempAv)

@@ -441,8 +441,7 @@ class GalvosController(QWidget):
         power2ph=self.horizontalScrollBar_power2ph.value()
         powerPO2=0.0
         powerLS = 2.0*power2ph/100.0
-        onTimeRatioCenter = 0.03
-        onTimePositionCenter = 95
+
         onTimePositionShort = 0.0
         on_time = 0.0
         lineRate=float(self.lineEdit_linerate_LS.text())
@@ -450,6 +449,12 @@ class GalvosController(QWidget):
         n_extra=float(self.lineEdit_extrapoints_LS.text())
         daq_freq=lineRate*(nr+n_extra)
         lineModulation=self.checkBox_modulateAllLinesEOM.isChecked()
+        if lineModulation:
+            onTimeRatioCenter = 0.03
+            onTimePositionCenter = 95        
+        else:
+            onTimeRatioCenter = 0.3
+            onTimePositionCenter = 95      
         self.galvos.setEOMParameters(self.eomLSFlag,config.eom_ao,daq_freq,powerPO2,powerLS,on_time,onTimePositionCenter,onTimeRatioCenter,onTimePositionShort,lineModulation)
         return powerLS, powerPO2, onTimeRatioCenter, onTimePositionCenter, onTimePositionShort, on_time
         
@@ -1741,16 +1746,16 @@ class GalvosController(QWidget):
         linescan_shift_x=float(self.horizontalScrollBar_line_scan_shift_x.value())
         linescan_shift_y=float(self.horizontalScrollBar_line_scan_shift_y.value())
 
-        linescan_x_1_um_forOCT=(linescan_px_x_1+linescan_shift_y/2)/nx*width
-        linescan_x_2_um_forOCT=(linescan_px_x_2+linescan_shift_y/2)/nx*width
-        linescan_y_1_um_forOCT=(linescan_px_y_1+linescan_shift_x/2)/(nextra+ny)*height_forOCT
-        linescan_y_2_um_forOCT=(linescan_px_y_2+linescan_shift_x/2)/(nextra+ny)*height_forOCT
+        linescan_x_1_um_forOCT=(linescan_px_x_1)/nx*width
+        linescan_x_2_um_forOCT=(linescan_px_x_2)/nx*width
+        linescan_y_1_um_forOCT=(linescan_px_y_1)/(ny+nextra)*height_forOCT
+        linescan_y_2_um_forOCT=(linescan_px_y_2)/(ny+nextra)*height_forOCT
         
         center_x=(linescan_x_2_um+linescan_x_1_um)/2-width/2
         center_y=(linescan_y_2_um+linescan_y_1_um)/2-height/2
  
         center_x_forOCT=(linescan_x_1_um_forOCT+linescan_x_2_um_forOCT)/2-width/2
-        center_y_forOCT=(linescan_y_2_um_forOCT+linescan_y_1_um_forOCT)/2-height/2
+        center_y_forOCT=(linescan_y_2_um_forOCT+linescan_y_1_um_forOCT)/2-height_forOCT/2
         
         print('LINE: position: '+str(center_x)+','+str(center_y))
         
@@ -2428,9 +2433,13 @@ class GalvosController(QWidget):
             
         
     def startlinescan(self):
+        
         self.update_linescan()
         if (self.simultaneousPO2LS or self.eomLSFlag):
             print('making connection for PO2-LS')
+            self.toggle_shutter2ph()
+            self.power_ao_eom.write(0)
+            
             self.make_connection_power_center_illumination()
             self.make_connection_power_short_illumination()
             self.make_connection_pos_center_illumination()
@@ -2465,7 +2474,8 @@ class GalvosController(QWidget):
         if (x_0_px==0 and y_0_px==0 and x_e_px==0 and y_e_px==0):
             print("no lines selected!")
         else:
-            self.toggle_shutter2ph()
+            if not(self.simultaneousPO2LS or self.eomLSFlag):
+                self.toggle_shutter2ph()
             self.viewer.toggleLinearSelection()
             self.make_connection_offset_X()
             self.make_connection_offset_Y()
@@ -2578,6 +2588,7 @@ class GalvosController(QWidget):
 
 
     def stoplinescan(self):
+        
         self.toggle_shutter2ph()
         self.viewer.toggleLinearSelection()
         
@@ -2604,7 +2615,7 @@ class GalvosController(QWidget):
         self.checkBox_activatePO2LS.setChecked(0)
 
         self.toggle_PO2_LS()
-        
+        self.power_ao_eom.write(0)
             
         
     def toggle_averaging(self):
@@ -2645,7 +2656,8 @@ class GalvosController(QWidget):
         
     def startscan(self):
         self.update2Ppower()
-        self.update3Ppower()        
+        if self.checkBoxLive3P.isChecked():
+            self.update3Ppower()        
                 
         
         self.checkBox_activateEOM.setChecked(0)
@@ -2711,10 +2723,10 @@ class GalvosController(QWidget):
             self.data_saver.addAttribute('depth',currentdepth)
             self.comment=(self.lineEdit_comment.text())
             self.data_saver.addAttribute('comment',self.comment)
-            if self.shutter2ph_closed:
+            if not(self.shutter2ph_closed):
                 self.data_saver.addAttribute('laser','MaiTai')
                 self.data_saver.addAttribute('power2P',self.powerValue2P)
-            elif self.shutter3ph_closed:
+            elif not(self.shutter3ph_closed):
                 self.data_saver.addAttribute('laser','3P Soliton')
                 self.data_saver.addAttribute('power3P',self.powerValue3P)
             else:

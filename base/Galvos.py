@@ -90,6 +90,7 @@ class Galvos():
         self.center_position=0
         self.center_duration=0.6
         self.short_position=0
+        self.modulatePowerOnAllLines=1
     
     def configOnDemand(self):  
         self.ao_task = VoltageOutTask()
@@ -115,7 +116,7 @@ class Galvos():
         print('    center_duration: '+str(self.center_duration))
         print('    short_position: '+str(self.short_position)+'\n')
         
-    def setEOMParameters(self,flag,ao_eom,daq_freq,powerPO2,powerLS,on_time,center_position,center_duration,short_position):
+    def setEOMParameters(self,flag,ao_eom,daq_freq,powerPO2,powerLS,on_time,center_position,center_duration,short_position,flagLineModulation):
         self.aomFlag = flag
         self.daq_freq = daq_freq
         self.powerPO2 = powerPO2
@@ -125,6 +126,7 @@ class Galvos():
         self.center_position=center_position
         self.center_duration=center_duration
         self.short_position=short_position
+        self.modulatePowerOnAllLines=flagLineModulation
         print('*** PO2LS Parameters:')
         print('    AOM Flag: '+str(self.aomFlag))
         print('    DAQ Flag: '+str(self.daq_freq))
@@ -275,9 +277,10 @@ class Galvos():
                 ramp_eom[endLineVoltageDown+self.short_position:endLineVoltageDown+self.short_position+self.n_pts_on,:]=self.powerPO2
                 
         else:
-            ramp_eom[startLineVoltageUp:-1,0:-2]=self.powerLS
-            ramp_eom[0:endLineVoltageDown,-1]=self.powerLS
-              
+            ramp_eom[:,:]=self.powerLS
+            ramp_eom[0:startLineVoltageUp,0]=0.0
+            #ramp_eom[endLineVoltageDown:-1,-1]=0.0            
+                          
         ramp_eom=ramp_eom.flatten('F')
         full_eom=np.zeros([1,ramp_eom.size])
         full_eom[0,0:ramp_eom.size]=ramp_eom
