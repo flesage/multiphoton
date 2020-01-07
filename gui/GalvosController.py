@@ -2657,7 +2657,7 @@ class GalvosController(QWidget):
     def startscan(self):
         self.update2Ppower()
         if self.checkBoxLive3P.isChecked():
-            self.update3Ppower()        
+            #self.update3Ppower()        
                 
         
         self.checkBox_activateEOM.setChecked(0)
