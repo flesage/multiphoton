@@ -5,11 +5,135 @@ import serial
 import time
 import binary
 import APTMotor
+import Queue
+
 from serial import SerialException
 '''
 import math
 '''
 #This script is used to control the 2photon microscope Z axis motor
+class piezoClass():
+    def __init__(self,comPort,baud):
+        print('open piezo')
+        self.comPort = comPort
+        self.baud=baud
+        
+        self.ser=serial.Serial(port=self.comPort, baudrate=self.baud, parity=serial.PARITY_NONE,
+        stopbits=serial.STOPBITS_ONE, bytesize=serial.EIGHTBITS,timeout=1,writeTimeout=1)
+        if self.ser.is_open:
+            self.ser.flushInput()
+            self.ser.flushOutput()              
+            self.ser.close()
+        self.ser.open()   
+        self.ser.flushInput()
+        self.ser.flushOutput()   
+        self.ser.write('1MO\r')
+        self.ser.flushInput()
+        self.ser.flushOutput()      
+        self.piezoMoving=0
+        print('port open!')     
+        
+    def closeMotor(self):
+        if self.ser.is_open:
+            self.ser.flushInput()
+            self.ser.flushOutput()   
+            self.ser.write('1MO\r')
+            self.ser.flushInput()
+            self.ser.flushOutput()                       
+            self.ser.close() 
+            print('port closed!')       
+        else:
+            print('port already closed!')
+            
+    def startJog(self,val):
+        if self.ser.is_open:
+            command='1JA'+str(val)+'\r'
+            print(command)
+            self.ser.flushInput()
+            self.ser.flushOutput()   
+            self.ser.write(command)
+            self.ser.flushInput()
+            self.ser.flushOutput()
+            time.sleep(0.1)
+            self.ser.write(command)
+            self.ser.flushInput()
+            self.ser.flushOutput()                        
+            print('jog started')   
+            self.piezoMoving=1   
+        else:
+            print('port closed!')   
+            
+    def stopMotor(self):
+        if self.ser.is_open:
+            if self.piezoMoving:
+                self.ser.flushInput()
+                self.ser.flushOutput()   
+                self.ser.write('1JA0\r')
+                self.ser.flushInput()
+                self.ser.flushOutput() 
+                time.sleep(0.1) 
+                self.ser.write('1ST\r')
+                self.ser.flushInput()
+                self.ser.flushOutput()                         
+                print('motor stopped')  
+                self.piezoMoving=0     
+            else:
+                print('motor already stopped')
+        else:
+            print('port closed!')    
+            
+    def goToPosition(self,distance):    
+        self.nm_per_ustep=10
+        distance_in_nm=distance*1000*1000
+        distance_in_usteps=distance_in_nm/self.nm_per_ustep
+        if self.ser.is_open:
+            command='1PR'+str(distance_in_usteps)+'\r'
+            self.ser.flushInput()
+            self.ser.flushOutput()   
+            self.ser.write(command)
+            self.ser.flushInput()
+            self.ser.flushOutput()                       
+            print('movement started')   
+            self.piezoMoving=1   
+        else:
+            print('port closed!')
+            
+    def setStopFlag(self,flag):
+        self.piezoMoving=flag
+        
+    def setSpeed(self,val):
+        self.speed=val
+        
+    def piezoOscillateUpdate(self):
+        self.speed=-self.speed
+        self.startJog(self.speed)
+            
+    def piezoOscillate(self,numIterations,timePerIteration,speed):
+        if self.ser.is_open:
+            for i in range(numIterations):
+                if self.piezoMoving:
+                    print('iteration:'+str(i)+'out of'+str(numIterations))
+                    command='1JA'+str(speed)+'\r'
+                    print(command)
+                    self.ser.flushInput()
+                    self.ser.flushOutput()   
+                    self.ser.write(command)
+                    self.ser.flushInput()
+                    self.ser.flushOutput()
+                    time.sleep(0.1)
+                    self.ser.write(command)
+                    self.ser.flushInput()
+                    self.ser.flushOutput()                        
+                    print('jog started')     
+                    time.sleep(timePerIteration)
+                    speed=-speed
+                else:
+                    self.stopMotor()
+            self.stopMotor()
+        else:
+            print('port closed!')      
+
+
 class Motorsclass:
     def __init__(self,comPort,baud):
         self.comPort = comPort

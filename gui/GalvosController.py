@@ -30,6 +30,7 @@ from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot
 import posixpath
 from gui.ImageDisplay import po2Viewer, CurrentLineViewer
 from base.Motors import ThorlabsMotor
+from base.Motors import piezoClass
 
 import ImageDisplay as imdisp
 from scipy.interpolate import interp1d
@@ -391,7 +392,65 @@ class GalvosController(QWidget):
     #activate EOM:
         self.checkBox_activateEOM.clicked.connect(self.toggle_EOM_LS)
         self.EOM_LS_flag=0
+        
+    #piezo movement
+        self.pushButton_piezo_on.clicked.connect(self.turnPiezoOn)
+        self.pushButton_piezo_off.clicked.connect(self.turnPiezoOff)
+        self.pushButton_piezo_jog.clicked.connect(self.jogPiezo)
+        self.pushButton_piezo_go.clicked.connect(self.goPiezo)
+        self.pushButton_piezo_stop.clicked.connect(self.stopPiezo)
+        self.pushButton_piezo_oscillate.clicked.connect(self.oscillatePiezoTimer)
+        self.pushButton_piezo_stop_oscillate.clicked.connect(self.stopOscillatePiezoTimer)
+        self.timerPiezoFlag=0
+        
+    def oscillatePiezoTimer(self):
+        self.timerPiezo = pg.QtCore.QTimer()
+        time=int(self.lineEdit_piezo_time_per_iter.text())
+        speed=self.spinBox_piezo.value()
+        self.piezo.setSpeed(speed)
+        self.timerPiezo.timeout.connect(self.piezo.piezoOscillateUpdate)
+        self.timerPiezoFlag=1
+        self.timerPiezo.start(time*1000)
+        
+        
+    def stopOscillatePiezoTimer(self):
+        if self.timerPiezoFlag:
+            self.timerPiezo.stop()
+            self.stopPiezo()
+        
+    def oscillatePiezo(self):
+        print('piezo oscillate')
+        speed=self.spinBox_piezo.value()
+        time=int(self.lineEdit_piezo_time_per_iter.text())
+        num=int(self.lineEdit_piezo_number_iter.text())
+        self.piezo.piezoOscillate(num,time,speed)
+        
+    def turnPiezoOn(self):
+        self.piezo=piezoClass('COM7',19200)
+        print('piezo turned on')
 
+    def turnPiezoOff(self):
+        self.piezo.closeMotor()
+        print('piezo turned off')
+        
+    def jogPiezo(self):
+        speed=self.spinBox_piezo.value()
+        self.piezo.startJog(speed)      
+        print('jogging started with speed: '+str(speed))
+        
+    def goPiezo(self):
+        distance=float(self.lineEdit_piezo_distance.text())
+        self.piezo.goToPosition(distance)     
+        print('motor started with distance: '+str(distance))
+
+    def stopPiezo(self):
+        self.piezo.stopMotor()
+        print('piezo stopped')
+
+    def stopOscillation(self):
+        self.piezo.setStopFlag(0)
+        
+        
     def generatePowerCurve2P(self):
         perc=np.arange(0,100,5)
         val=[1.3,8,23,45,75,113,155,204,257,312,370,426,484,580,580,580,580,580,580,580]
@@ -1974,7 +2033,7 @@ class GalvosController(QWidget):
             self.flagWheel = 0
             thread = threading.Thread(target=self.wheel_run, args=(command,))
             thread.start()
-            self.update3Ppower()
+            #self.update3Ppower()
         
     def setPower3ph_noThread(self,value):
         if self.flagWheel == 1:
@@ -2656,7 +2715,7 @@ class GalvosController(QWidget):
         
     def startscan(self):
         self.update2Ppower()
-        if self.checkBoxLive3P.isChecked():
+        #if self.checkBoxLive3P.isChecked():
             #self.update3Ppower()        
                 
         
