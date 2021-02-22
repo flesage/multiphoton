@@ -91,7 +91,14 @@ class Galvos():
         self.center_duration=0.6
         self.short_position=0
         self.modulatePowerOnAllLines=1
-    
+        self.powerPO2=0.0
+        self.powerLS=0.0
+        self.ao_eom=0.0
+        self.gate_on=0.0
+        self.center_position=0.0
+        self.center_duration=0.0
+        self.short_position=0.0
+        
     def configOnDemand(self):  
         self.ao_task = VoltageOutTask()
         self.ao_task.CreateAOVoltageChan(posixpath.join(self.device,self.ao_x)+','+posixpath.join(self.device,self.ao_y),"Galvos",-10.0,10.0,DAQmx_Val_Volts,None)

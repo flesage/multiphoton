@@ -224,6 +224,31 @@ class Motorsclass:
             time.sleep(0.1)
             self.ser.write('1MD?\r')
             data = self.ser.read(1);
+            
+    def get_velocity_x(self):
+        self.ser.flushInput()
+        self.ser.flushOutput()        
+        print 'get_pos: in function'
+        data=0
+        while not data:
+            self.ser.write('1VA?\r')
+            data = self.ser.read(1000)
+        time.sleep(0.1)  
+        print 'get velocity: done'
+        return data     
+    
+    def set_velocity_x(self,velocity_x):
+        self.ser.flushInput()
+        self.ser.flushOutput()        
+        data=0
+        self.ser.write('1VU'+str(0.4)+'\r')
+        self.ser.write('1VB'+str(velocity_x)+'\r')
+
+        self.ser.write('1VA'+str(velocity_x)+'\r')
+        while not data:
+            self.ser.write('1MD?\r')
+            data = self.ser.read(1);
+            time.sleep(0.1)    
  
     def move_dy(self,dy):
         self.ser.flushInput()

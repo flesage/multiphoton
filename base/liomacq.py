@@ -109,8 +109,17 @@ class AnalogInputTask(Task):
                 local_data =  self.data[self.n_pts*self.consumers[ic+2]:self.n_pts*(self.consumers[ic+2]+1)]
                 if (self.consumers[ic+4]==True): #only puts data in Queue if flag is set to 1 in consumer
                     if self.decoder is not None:
-                        local_data = self.decoder.decode(local_data)       
-                    self.consumers[ic].put(local_data,self.consumers[ic+1])
+                        local_data = self.decoder.decode(local_data) 
+                    print(self.consumers[ic+3])
+                    if(self.consumers[ic+3]=='viewer'):
+                        local_data_viewer=np.copy(local_data)
+                        self.consumers[ic].put(local_data_viewer,self.consumers[ic+1])
+                    elif(self.consumers[ic+3]=='save'):
+                        local_data_save=np.copy(local_data)
+                        self.consumers[ic].put(local_data_save,self.consumers[ic+1])
+                    else:
+                        self.consumers[ic].put(local_data,self.consumers[ic+1])
+                        
             except Queue.Full:
                 pass
         return 0 # The function should return an integer

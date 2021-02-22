@@ -1006,7 +1006,6 @@ class ChannelViewer(Queue.Queue):
                 self.avData[self.counter,:,:]=data
                 self.counter=(self.counter+1)%self.sizeBuffer
                 sizeArray = self.avData.shape
-                #tmp=self.avData.reshape((sizeArray[0]*sizeArray[1],sizeArray[2]))
                 tmp=np.mean(self.avData,axis=0)
                 self.imv.setImage(-tmp,autoRange=False,autoLevels=self.levelFlag,pos=(0,0),scale=(1,1))
                 self.imi=self.imv.getImageItem()
